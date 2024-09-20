@@ -21,9 +21,9 @@ def load_data_isruc1(filepath, window_size, channels, total_num):
             _, _, Zxx = signal.stft(data_resampled, 200, 'hann', 256)
             Zxx = 20 * np.log10(np.abs(Zxx))
             if X is None:
-                X = torch.unsqueeze(torch.tensor(Zxx, dtype=torch.float32, requires_grad=False), dim=1)
+                X = torch.tensor(Zxx, dtype=torch.float32, requires_grad=False)
             else:
-                temp = torch.unsqueeze(torch.tensor(Zxx, dtype=torch.float32, requires_grad=False), dim=1)
+                temp = torch.tensor(Zxx, dtype=torch.float32, requires_grad=False)
                 X = torch.cat((X, temp), dim=1)
         label_name = file.split('.')[0][7:] + '_1.npy'
         label = np.load(os.path.join(filepath, 'label', label_name))
@@ -41,10 +41,10 @@ def load_data_isruc1(filepath, window_size, channels, total_num):
 
 class DataWrapper(Dataset):
     def __init__(self, data, labels, task):
-        assert len(data) == len(labels)
+        assert len(data) == len(labels) == len(task)
         self.data = data
         self.labels = labels
-        self.task = [task for _ in range(len(data))]
+        self.task = task
 
     def __getitem__(self, item):
         return self.data[item], self.labels[item], self.task[item]
@@ -53,22 +53,46 @@ class DataWrapper(Dataset):
         return len(self.data)
 
 
-def create_fold(train, valid, test, datas, labels, task):
-    train_datas = [item for idx in train for item in datas[idx]]
-    train_labels = [item for idx in train for item in labels[idx]]
-    valid_datas = [item for idx in valid for item in datas[idx]]
-    valid_labels = [item for idx in valid for item in labels[idx]]
-    test_datas = [item for idx in test for item in datas[idx]]
-    test_labels = [item for idx in test for item in labels[idx]]
-    trainset = DataWrapper(train_datas, train_labels, task)
-    validset = DataWrapper(valid_datas, valid_labels, task)
-    testset = DataWrapper(test_datas, test_labels, task)
-    return trainset, validset, testset
+def create_fold(train, valid, test, datas_tasklist, labels_tasklist):
+    train_data, train_label, train_task = [], [], []
+    valid_data, valid_label, valid_task = [], [], []
+    test_data, test_label, test_task = [], [], []
+    t = 0
+    for datas, labels in zip(datas_tasklist, labels_tasklist):
+        for idx in train:
+            for X, y in zip(datas[idx], labels[idx]):
+                train_data.append(X)
+                train_label.append(y)
+                train_task.append(t)
+        for idx in valid:
+            for X, y in zip(datas[idx], labels[idx]):
+                valid_data.append(X)
+                valid_label.append(y)
+                valid_task.append(t)
+        for idx in test:
+            for X, y in zip(datas[idx], labels[idx]):
+                test_data.append(X)
+                test_label.append(y)
+                test_task.append(t)
+        t += 1
+    train_dataset = DataWrapper(train_data, train_label, train_task)
+    valid_dataset = DataWrapper(valid_data, valid_label, valid_task)
+    test_dataset = DataWrapper(test_data, test_label, test_task)
+    return train_dataset, valid_dataset, test_dataset
 
 
 if __name__ == '__main__':
     datas, labels = load_data_isruc1('/home/ShareData/ISRUC-1/ISRUC-1', 10, ['F3_A2', 'ROC_A1'], 5)
-    train, valid, test = create_fold([0, 1, 2], [3], [4], datas, labels, 0)
-    train_loader = DataLoader(train, batch_size=16, shuffle=True)
+    train, valid, test = create_fold([0, 1, 2], [3], [4], [datas, datas, datas], [labels, labels, labels])
+    train_loader = DataLoader(train, batch_size=32, shuffle=False)
+    valid_loader = DataLoader(valid, batch_size=8, shuffle=False)
+    test_loader = DataLoader(test, batch_size=8, shuffle=False)
+    print('train loader...')
     for X, y, t in train_loader:
+        print(f'{X.shape}, {y.shape}, {t}')
+    print('valid loader...')
+    for X, y, t in valid_loader:
+        print(f'{X.shape}, {y.shape}, {t}')
+    print('test loader...')
+    for X, y, t in test_loader:
         print(f'{X.shape}, {y.shape}, {t}')
