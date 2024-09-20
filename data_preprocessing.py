@@ -115,6 +115,44 @@ def load_data_mass(filepath, window_size, channels, total_num):
     return datas, labels
 
 
+def load_data_sleepedf(filepath, window_size, channels, total_num):
+    file_names = [file for file in os.listdir(filepath)]
+    file_names.sort()
+    sleepedf_channels = ['Fpz-Cz', 'EOG', 'EMG']
+    channel_index = [sleepedf_channels.index(c) for c in channels]
+    datas, labels = [], []
+    for file in file_names:
+        print(f'loading raw data from {os.path.join(filepath, file)}')
+        try:
+            npz_file = np.load(os.path.join(filepath, file), allow_pickle=True)
+        except IOError as e:
+            print(f"Failed to load data from {os.path.join(filepath, file)}: {e}")
+            continue
+        raw_data_trans = npz_file['x'][:, :, channel_index]
+        raw_data_trans = raw_data_trans.transpose(2, 0, 1)
+        X = None
+        for idx in range(raw_data_trans.shape[0]):
+            series = raw_data_trans[idx]
+            print(f'calculating stft for channel index {idx} in sleepedf...')
+            _, _, Zxx = signal.stft(series, 100, 'hann', 256)
+            Zxx = 20 * np.log10(np.abs(Zxx))
+            if X is None:
+                X = torch.tensor(Zxx, dtype=torch.float32, requires_grad=False)
+            else:
+                temp = torch.tensor(Zxx, dtype=torch.float32, requires_grad=False)
+                X = torch.cat((X, temp), dim=1)
+        y = torch.tensor(npz_file['y'], dtype=torch.int64, requires_grad=False)
+        data_seq, label_seq, segs = [], [], X.shape[0] // window_size
+        for idx in range(segs):
+            data_seq.append(X[idx * window_size: (idx + 1) * window_size])
+            label_seq.append(y[idx * window_size: (idx + 1) * window_size])
+        datas.append(data_seq)
+        labels.append(label_seq)
+        if len(datas) >= total_num:
+            break
+    return datas, labels
+
+
 class DataWrapper(Dataset):
     def __init__(self, data, labels, task):
         assert len(data) == len(labels) == len(task)
@@ -157,8 +195,18 @@ def create_fold(train, valid, test, datas_tasklist, labels_tasklist):
     return train_dataset, valid_dataset, test_dataset
 
 
+def load_all_datasets(args):
+    datas_isruc1, labels_isruc1 = load_data_isruc1(args.isruc1_path, args.window_size, args.isruc1, args.total_num)
+    datas_shhs, labels_shhs = load_data_shhs(args.shhs_path, args.window_size, args.shhs, args.total_num)
+    datas_mass, labels_mass = load_data_mass(args.mass_path, args.window_size, args.mass, args.total_num)
+    datas_sleep, labels_sleep = load_data_sleepedf(args.sleep_edf_path, args.window_size, args.sleep_edf, args.total_num)
+    datas = [datas_isruc1, datas_shhs, datas_mass, datas_sleep]
+    labels = [labels_isruc1, labels_shhs, labels_mass, labels_sleep]
+    return datas, labels
+
+
 if __name__ == '__main__':
-    datas, labels = load_data_mass('/home/ShareData/MASS_SS3_3000_25C-Cz', 10, ['C4', 'EogL'], 5)
+    datas, labels = load_data_sleepedf('/home/ShareData/sleep-edf-153-3chs', 10, ['Fpz-Cz', 'EOG'], 5)
     train, valid, test = create_fold([0, 1, 2], [3], [4], [datas, datas, datas], [labels, labels, labels])
     train_loader = DataLoader(train, batch_size=32, shuffle=False)
     valid_loader = DataLoader(valid, batch_size=8, shuffle=False)

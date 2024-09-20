@@ -16,12 +16,11 @@ if __name__ == '__main__':
     parser.add_argument('--mass_path', type=str, nargs='?',
                         default='/home/ShareData/MASS_SS3_3000_25C-Cz', help='file path of mass dataset')
     parser.add_argument('--mass', nargs='+', default=['C4', 'EogL'], help='channels for mass')
+    parser.add_argument('--sleep_edf_path', type=str, nargs='?',
+                        default='/home/ShareData/sleep-edf-153-3chs', help='file path of sleepedf dataset')
+    parser.add_argument('--sleep_edf', nargs='+', default=['Fpz-Cz', 'EOG'], help='channels of sleepedf')
     args = parser.parse_args()
-    datas1, labels1 = load_data_isruc1(args.isruc1_path, args.window_size, args.isruc1, args.total_num)
-    datas2, labels2 = load_data_shhs(args.shhs_path, args.window_size, args.shhs, args.total_num)
-    datas3, labels3 = load_data_mass(args.mass_path, args.window_size, args.mass, args.total_num)
-    datas = [datas1, datas2, datas3]
-    labels = [labels1, labels2, labels3]
+    datas, labels = load_all_datasets(args)
     train, valid, test = create_fold([0, 1, 2], [3], [4], datas, labels)
     train_loader = DataLoader(train, batch_size=16, shuffle=False)
     valid_loader = DataLoader(valid, batch_size=8, shuffle=False)
