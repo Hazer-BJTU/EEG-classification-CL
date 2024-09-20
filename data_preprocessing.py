@@ -5,6 +5,7 @@ from scipy import signal
 import os
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
+import pickle as pkl
 
 
 def load_data_isruc1(filepath, window_size, channels, total_num):
@@ -37,6 +38,19 @@ def load_data_isruc1(filepath, window_size, channels, total_num):
         if len(datas) >= total_num:
             break
     return datas, labels
+
+
+def load_data_shhs(filepath, window_size, channels, total_num):
+    file_names = [file for file in os.listdir(filepath) if file.endswith('.pkl')]
+    file_names.sort()
+    shhs_channels = ['EEG', "EEG(sec)", 'EOG(L)', 'EMG']
+    channel_index = [shhs_channels.index(c) for c in channels]
+    datas, labels = [], []
+    for file in file_names:
+        raw_data = None
+        with open(os.path.join(filepath, file), 'rb') as data_file:
+            raw_data = pkl.load(data_file)
+        print(raw_data['new_xall'])
 
 
 class DataWrapper(Dataset):
@@ -82,6 +96,7 @@ def create_fold(train, valid, test, datas_tasklist, labels_tasklist):
 
 
 if __name__ == '__main__':
+    '''
     datas, labels = load_data_isruc1('/home/ShareData/ISRUC-1/ISRUC-1', 10, ['F3_A2', 'ROC_A1'], 5)
     train, valid, test = create_fold([0, 1, 2], [3], [4], [datas, datas, datas], [labels, labels, labels])
     train_loader = DataLoader(train, batch_size=32, shuffle=False)
@@ -96,3 +111,5 @@ if __name__ == '__main__':
     print('test loader...')
     for X, y, t in test_loader:
         print(f'{X.shape}, {y.shape}, {t}')
+    '''
+    load_data_shhs('/home/ShareData/shhs1_process6', 10, ['EEG', 'EOG(L)'], 5)
