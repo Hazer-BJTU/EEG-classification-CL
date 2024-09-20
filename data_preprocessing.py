@@ -13,8 +13,8 @@ def load_data_isruc1(filepath, window_size, channels, total_num):
     file_names.sort()
     datas, labels = [], []
     for file in file_names:
-        raw_data = sio.loadmat(os.path.join(filepath, file))
         print(f'loading raw data from {os.path.join(filepath, file)}...')
+        raw_data = sio.loadmat(os.path.join(filepath, file))
         X = None
         for channel in channels:
             data_resampled = signal.resample(raw_data[channel], 3000, axis=1)
@@ -47,10 +47,34 @@ def load_data_shhs(filepath, window_size, channels, total_num):
     channel_index = [shhs_channels.index(c) for c in channels]
     datas, labels = [], []
     for file in file_names:
-        raw_data = None
+        print(f'loading raw data from {os.path.join(filepath, file)}...')
         with open(os.path.join(filepath, file), 'rb') as data_file:
             raw_data = pkl.load(data_file)
-        print(raw_data['new_xall'])
+        raw_data_trans = raw_data['new_xall'][:, channel_index]
+        sleep_epoch_num = raw_data_trans.shape[0] // 3000
+        raw_data_trans = raw_data_trans.transpose(1, 0)
+        X = None
+        for idx in range(raw_data_trans.shape[0]):
+            series = raw_data_trans[idx]
+            series = series.reshape(sleep_epoch_num, 3000)
+            print(f'calculating stft for channel index {idx} in shhs...')
+            _, _, Zxx = signal.stft(series, 200, 'hann', 256)
+            Zxx = 20 * np.log10(np.abs(Zxx))
+            if X is None:
+                X = torch.tensor(Zxx, dtype=torch.float32, requires_grad=False)
+            else:
+                temp = torch.tensor(Zxx, dtype=torch.float32, requires_grad=False)
+                X = torch.cat((X, temp), dim=1)
+        y = torch.tensor(raw_data['stage_label'], dtype=torch.int64, requires_grad=False)
+        data_seq, label_seq, segs = [], [], X.shape[0] // window_size
+        for idx in range(segs):
+            data_seq.append(X[idx * window_size: (idx + 1) * window_size])
+            label_seq.append(y[idx * window_size: (idx + 1) * window_size])
+        datas.append(data_seq)
+        labels.append(label_seq)
+        if len(datas) >= total_num:
+            break
+    return datas, labels
 
 
 class DataWrapper(Dataset):
@@ -96,8 +120,7 @@ def create_fold(train, valid, test, datas_tasklist, labels_tasklist):
 
 
 if __name__ == '__main__':
-    '''
-    datas, labels = load_data_isruc1('/home/ShareData/ISRUC-1/ISRUC-1', 10, ['F3_A2', 'ROC_A1'], 5)
+    datas, labels = load_data_shhs('/home/ShareData/shhs1_process6', 10, ['EEG', 'EOG(L)'], 5)
     train, valid, test = create_fold([0, 1, 2], [3], [4], [datas, datas, datas], [labels, labels, labels])
     train_loader = DataLoader(train, batch_size=32, shuffle=False)
     valid_loader = DataLoader(valid, batch_size=8, shuffle=False)
@@ -111,5 +134,3 @@ if __name__ == '__main__':
     print('test loader...')
     for X, y, t in test_loader:
         print(f'{X.shape}, {y.shape}, {t}')
-    '''
-    load_data_shhs('/home/ShareData/shhs1_process6', 10, ['EEG', 'EOG(L)'], 5)

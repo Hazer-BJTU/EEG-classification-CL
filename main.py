@@ -15,8 +15,9 @@ if __name__ == '__main__':
     parser.add_argument('--shhs', nargs='+', default=['EEG', 'EOG(L)'])
     args = parser.parse_args()
     datas1, labels1 = load_data_isruc1(args.isruc1_path, args.window_size, args.isruc1, args.total_num)
-    datas = [datas1, datas1, datas1]
-    labels = [labels1, labels1, labels1]
+    datas2, labels2 = load_data_shhs(args.shhs_path, args.window_size, args.shhs, args.total_num)
+    datas = [datas1, datas2]
+    labels = [labels1, labels2]
     train, valid, test = create_fold([0, 1, 2], [3], [4], datas, labels)
     train_loader = DataLoader(train, batch_size=32, shuffle=False)
     valid_loader = DataLoader(valid, batch_size=8, shuffle=False)
