@@ -12,14 +12,18 @@ if __name__ == '__main__':
     parser.add_argument('--isruc1', nargs='+', default=['C4_A1', 'LOC_A2'], help='channels for isruc1')
     parser.add_argument('--shhs_path', type=str, nargs='?',
                         default='/home/ShareData/shhs1_process6', help='file path of shhs dataset')
-    parser.add_argument('--shhs', nargs='+', default=['EEG', 'EOG(L)'])
+    parser.add_argument('--shhs', nargs='+', default=['EEG', 'EOG(L)'], help='channels for shhs')
+    parser.add_argument('--mass_path', type=str, nargs='?',
+                        default='/home/ShareData/MASS_SS3_3000_25C-Cz', help='file path of mass dataset')
+    parser.add_argument('--mass', nargs='+', default=['C4', 'EogL'], help='channels for mass')
     args = parser.parse_args()
     datas1, labels1 = load_data_isruc1(args.isruc1_path, args.window_size, args.isruc1, args.total_num)
     datas2, labels2 = load_data_shhs(args.shhs_path, args.window_size, args.shhs, args.total_num)
-    datas = [datas1, datas2]
-    labels = [labels1, labels2]
+    datas3, labels3 = load_data_mass(args.mass_path, args.window_size, args.mass, args.total_num)
+    datas = [datas1, datas2, datas3]
+    labels = [labels1, labels2, labels3]
     train, valid, test = create_fold([0, 1, 2], [3], [4], datas, labels)
-    train_loader = DataLoader(train, batch_size=32, shuffle=False)
+    train_loader = DataLoader(train, batch_size=16, shuffle=False)
     valid_loader = DataLoader(valid, batch_size=8, shuffle=False)
     test_loader = DataLoader(test, batch_size=8, shuffle=False)
     print('train loader...')

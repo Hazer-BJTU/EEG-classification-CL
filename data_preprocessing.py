@@ -19,7 +19,7 @@ def load_data_isruc1(filepath, window_size, channels, total_num):
         for channel in channels:
             data_resampled = signal.resample(raw_data[channel], 3000, axis=1)
             print(f'calculating stft for channel {channel} in isruc1...')
-            _, _, Zxx = signal.stft(data_resampled, 200, 'hann', 256)
+            _, _, Zxx = signal.stft(data_resampled, 100, 'hann', 256)
             Zxx = 20 * np.log10(np.abs(Zxx))
             if X is None:
                 X = torch.tensor(Zxx, dtype=torch.float32, requires_grad=False)
@@ -58,7 +58,7 @@ def load_data_shhs(filepath, window_size, channels, total_num):
             series = raw_data_trans[idx]
             series = series.reshape(sleep_epoch_num, 3000)
             print(f'calculating stft for channel index {idx} in shhs...')
-            _, _, Zxx = signal.stft(series, 200, 'hann', 256)
+            _, _, Zxx = signal.stft(series, 100, 'hann', 256)
             Zxx = 20 * np.log10(np.abs(Zxx))
             if X is None:
                 X = torch.tensor(Zxx, dtype=torch.float32, requires_grad=False)
@@ -66,6 +66,44 @@ def load_data_shhs(filepath, window_size, channels, total_num):
                 temp = torch.tensor(Zxx, dtype=torch.float32, requires_grad=False)
                 X = torch.cat((X, temp), dim=1)
         y = torch.tensor(raw_data['stage_label'], dtype=torch.int64, requires_grad=False)
+        data_seq, label_seq, segs = [], [], X.shape[0] // window_size
+        for idx in range(segs):
+            data_seq.append(X[idx * window_size: (idx + 1) * window_size])
+            label_seq.append(y[idx * window_size: (idx + 1) * window_size])
+        datas.append(data_seq)
+        labels.append(label_seq)
+        if len(datas) >= total_num:
+            break
+    return datas, labels
+
+
+def load_data_mass(filepath, window_size, channels, total_num):
+    file_names = [file for file in os.listdir(filepath) if file.endswith('-Datasub.mat')]
+    file_names.sort()
+    mass_channels = ['FP1', 'FP2', 'Fz', 'F3', 'F4', 'F7', 'F8', 'C3', 'C4', 'T3', 'T4', 'Pz', 'P3', 'P4', 'T5',
+                     'T6', 'Oz', 'O1', 'O2', 'EogL', 'EogR', 'Emg1', 'Emg2', 'Emg3', 'Ecg']
+    channel_index = [mass_channels.index(c) for c in channels]
+    datas, labels = [], []
+    for file in file_names:
+        print(f'loading raw data from {os.path.join(filepath, file)}')
+        raw_data = sio.loadmat(os.path.join(filepath, file))
+        raw_data_trans = raw_data['PSG'][:, channel_index, :]
+        raw_data_trans = raw_data_trans.transpose(1, 0, 2)
+        X = None
+        for idx in range(raw_data_trans.shape[0]):
+            series = raw_data_trans[idx]
+            print(f'calculating stft for channel index {idx} in mass...')
+            _, _, Zxx = signal.stft(series, 100, 'hann', 256)
+            Zxx = 20 * np.log10(np.abs(Zxx))
+            if X is None:
+                X = torch.tensor(Zxx, dtype=torch.float32, requires_grad=False)
+            else:
+                temp = torch.tensor(Zxx, dtype=torch.float32, requires_grad=False)
+                X = torch.cat((X, temp), dim=1)
+        label_name = file[:10] + '-Label.mat'
+        stage_label = sio.loadmat(os.path.join(filepath, label_name))['label']
+        stage_label = np.argmax(stage_label, axis=1)
+        y = torch.tensor(stage_label, dtype=torch.int64, requires_grad=False)
         data_seq, label_seq, segs = [], [], X.shape[0] // window_size
         for idx in range(segs):
             data_seq.append(X[idx * window_size: (idx + 1) * window_size])
@@ -120,7 +158,7 @@ def create_fold(train, valid, test, datas_tasklist, labels_tasklist):
 
 
 if __name__ == '__main__':
-    datas, labels = load_data_shhs('/home/ShareData/shhs1_process6', 10, ['EEG', 'EOG(L)'], 5)
+    datas, labels = load_data_mass('/home/ShareData/MASS_SS3_3000_25C-Cz', 10, ['C4', 'EogL'], 5)
     train, valid, test = create_fold([0, 1, 2], [3], [4], [datas, datas, datas], [labels, labels, labels])
     train_loader = DataLoader(train, batch_size=32, shuffle=False)
     valid_loader = DataLoader(valid, batch_size=8, shuffle=False)
