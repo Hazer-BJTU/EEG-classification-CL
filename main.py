@@ -1,4 +1,6 @@
 from data_preprocessing import *
+from metric import *
+from models import *
 import argparse
 
 
@@ -19,7 +21,9 @@ if __name__ == '__main__':
     parser.add_argument('--sleep_edf_path', type=str, nargs='?',
                         default='/home/ShareData/sleep-edf-153-3chs', help='file path of sleepedf dataset')
     parser.add_argument('--sleep_edf', nargs='+', default=['Fpz-Cz', 'EOG'], help='channels of sleepedf')
+    parser.add_argument('--task_num', type=int, nargs='?', default=4, help='number of tasks')
     args = parser.parse_args()
+    device = torch.device(f'cuda:{args.cuda_idx}')
     datas, labels = load_all_datasets(args)
     train, valid, test = create_fold([0, 1, 2], [3], [4], datas, labels)
     train_loader = DataLoader(train, batch_size=16, shuffle=False)
@@ -34,3 +38,9 @@ if __name__ == '__main__':
     print('test loader...')
     for X, y, t in test_loader:
         print(f'{X.shape}, {y.shape}, {t}')
+    net = SeqSleepNet()
+    net.to(device)
+    confusion_matrix = ConfusionMatrix(args.task_num)
+    print(confusion_matrix.mat)
+    confusion_matrix = evaluate(net, valid_loader, confusion_matrix, device)
+    print(confusion_matrix.mat)
