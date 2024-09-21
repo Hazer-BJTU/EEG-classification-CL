@@ -26,6 +26,10 @@ if __name__ == '__main__':
     device = torch.device(f'cuda:{args.cuda_idx}')
     datas, labels = load_all_datasets(args)
     trains, valids, tests = create_fold_task_separated([0, 1, 2], [3], [4], datas, labels)
-    train_loader = DataLoader(trains[0], batch_size=16, shuffle=True)
-    for X, y in train_loader:
-        print(f'{X.shape}, {y.shape}')
+    net = SeqSleepNet()
+    net.apply(init_weight)
+    net.to(device)
+    confusion_maxtrix = ConfusionMatrix(4, 5)
+    print(confusion_maxtrix.mat)
+    confusion_maxtrix = evaluate_tasks(net, tests, confusion_maxtrix, device)
+    print(confusion_maxtrix.mat)
