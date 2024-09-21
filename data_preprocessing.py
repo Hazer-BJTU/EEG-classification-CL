@@ -154,14 +154,17 @@ def load_data_sleepedf(filepath, window_size, channels, total_num):
 
 
 class DataWrapper(Dataset):
-    def __init__(self, data, labels, task):
-        assert len(data) == len(labels) == len(task)
+    def __init__(self, data, label, task=None):
+        assert len(data) == len(label)
         self.data = data
-        self.labels = labels
+        self.label = label
         self.task = task
 
     def __getitem__(self, item):
-        return self.data[item], self.labels[item], self.task[item]
+        if self.task is None:
+            return self.data[item], self.label[item]
+        else:
+            return self.data[item], self.label[item], self.task[item]
 
     def __len__(self):
         return len(self.data)
@@ -193,6 +196,32 @@ def create_fold(train, valid, test, datas_tasklist, labels_tasklist):
     valid_dataset = DataWrapper(valid_data, valid_label, valid_task)
     test_dataset = DataWrapper(test_data, test_label, test_task)
     return train_dataset, valid_dataset, test_dataset
+
+
+def create_fold_task_separated(train, valid, test, datas_tasklist, labels_tasklist):
+    train_datasets = []
+    valid_datasets = []
+    test_datasets = []
+    for datas, labels in zip(datas_tasklist, labels_tasklist):
+        datas_selected, labels_selected = [], []
+        for idx in train:
+            for X, y in zip(datas[idx], labels[idx]):
+                datas_selected.append(X)
+                labels_selected.append(y)
+        train_datasets.append(DataWrapper(datas_selected, labels_selected))
+        datas_selected, labels_selected = [], []
+        for idx in valid:
+            for X, y in zip(datas[idx], labels[idx]):
+                datas_selected.append(X)
+                labels_selected.append(y)
+        valid_datasets.append(DataWrapper(datas_selected, labels_selected))
+        datas_selected, labels_selected = [], []
+        for idx in test:
+            for X, y in zip(datas[idx], labels[idx]):
+                datas_selected.append(X)
+                labels_selected.append(y)
+        test_datasets.append(DataWrapper(datas_selected, labels_selected))
+    return train_datasets, valid_datasets, test_datasets
 
 
 def load_all_datasets(args):

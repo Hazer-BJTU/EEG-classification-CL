@@ -25,22 +25,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     device = torch.device(f'cuda:{args.cuda_idx}')
     datas, labels = load_all_datasets(args)
-    train, valid, test = create_fold([0, 1, 2], [3], [4], datas, labels)
-    train_loader = DataLoader(train, batch_size=16, shuffle=False)
-    valid_loader = DataLoader(valid, batch_size=8, shuffle=False)
-    test_loader = DataLoader(test, batch_size=8, shuffle=False)
-    print('train loader...')
-    for X, y, t in train_loader:
-        print(f'{X.shape}, {y.shape}, {t}')
-    print('valid loader...')
-    for X, y, t in valid_loader:
-        print(f'{X.shape}, {y.shape}, {t}')
-    print('test loader...')
-    for X, y, t in test_loader:
-        print(f'{X.shape}, {y.shape}, {t}')
-    net = SeqSleepNet()
-    net.to(device)
-    confusion_matrix = ConfusionMatrix(args.task_num)
-    print(confusion_matrix.mat)
-    confusion_matrix = evaluate(net, valid_loader, confusion_matrix, device)
-    print(confusion_matrix.mat)
+    trains, valids, tests = create_fold_task_separated([0, 1, 2], [3], [4], datas, labels)
+    train_loader = DataLoader(trains[0], batch_size=16, shuffle=True)
+    for X, y in train_loader:
+        print(f'{X.shape}, {y.shape}')
