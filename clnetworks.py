@@ -45,7 +45,7 @@ class CLnetwork:
     def end_epoch(self, valid_dataset):
         train_acc = self.confusion_matrix.accuracy()
         print(f'epoch: {self.epoch}, train loss: {self.train_loss:.3f}, train accuracy: {train_acc:.3f}')
-        if self.epoch % self.args.valid_epoch == 0:
+        if (self.epoch + 1) % self.args.valid_epoch == 0:
             print(f'validating on the datasets...')
             valid_confusion = ConfusionMatrix(1)
             valid_confusion = evaluate_tasks(self.net, [valid_dataset], valid_confusion,
