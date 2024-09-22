@@ -39,7 +39,7 @@ class CLnetwork:
         L.backward()
         nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=20, norm_type=2)
         self.optimizer.step()
-        self.train_loss += L
+        self.train_loss += L.item()
         self.confusion_matrix.count_task_separated(y_hat, y, 0)
 
     def end_epoch(self, valid_dataset):
