@@ -35,6 +35,26 @@ class ConfusionMatrix:
         else:
             return acc
 
+    def macro_f1(self):
+        mf1 = []
+        for idx in range(self.num_tasks):
+            f1 = 0
+            for i in range(self.num_catagories):
+                row, column = 0, 0
+                for j in range(self.num_catagories):
+                    row += self.mat[idx][i][j].item()
+                    column += self.mat[idx][j][i].item()
+                precision = self.mat[idx][i][i].item() / max(row, 1)
+                recall = self.mat[idx][i][i].item() / max(column, 1)
+                f1 += 2 * precision * recall / max(precision + recall, 1)
+            f1 /= self.num_catagories
+            mf1.append(f1)
+        if len(mf1) == 1:
+            return mf1[0]
+        else:
+            return mf1
+
+
     def clear(self):
         self.mat.zero_()
 

@@ -43,15 +43,16 @@ class CLnetwork:
         self.confusion_matrix.count_task_separated(y_hat, y, 0)
 
     def end_epoch(self, valid_dataset):
-        train_acc = self.confusion_matrix.accuracy()
-        print(f'epoch: {self.epoch}, train loss: {self.train_loss:.3f}, train accuracy: {train_acc:.3f}')
+        train_acc, train_mf1 = self.confusion_matrix.accuracy(), self.confusion_matrix.macro_f1()
+        print(f'epoch: {self.epoch}, train loss: {self.train_loss:.3f}, train accuracy: {train_acc:.3f}, '
+              f'macro F1: {train_mf1:.3f}')
         if (self.epoch + 1) % self.args.valid_epoch == 0:
             print(f'validating on the datasets...')
             valid_confusion = ConfusionMatrix(1)
             valid_confusion = evaluate_tasks(self.net, [valid_dataset], valid_confusion,
                                              self.device, self.args.valid_batch)
-            valid_acc = valid_confusion.accuracy()
-            print(f'valid acc: {valid_acc:.3f}')
+            valid_acc, valid_mf1 = valid_confusion.accuracy(), valid_confusion.macro_f1()
+            print(f'valid accuracy: {valid_acc:.3f}, valid macro F1: {valid_mf1:.3f}')
             if valid_acc > self.best_valid_acc:
                 self.best_train_loss = self.train_loss
                 self.best_train_acc = train_acc
