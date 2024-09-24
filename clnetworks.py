@@ -10,6 +10,7 @@ class CLnetwork:
         self.args = args
         self.net = SeqSleepNet(args.dropout)
         self.net.apply(init_weight)
+        self.scheduler = None
         self.optimizer = torch.optim.Adam(self.net.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         self.loss = nn.CrossEntropyLoss(reduction='none')
         self.best_train_loss, self.best_train_acc, self.best_valid_acc = 0.0, 0.0, 0.0
@@ -25,6 +26,8 @@ class CLnetwork:
         self.epoch = 0
         self.best_net = copy.deepcopy(self.net)
         self.best_train_loss, self.best_train_acc, self.best_valid_acc = 0.0, 0.0, 0.0
+        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay)
+        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, max(self.args.num_epochs // 6, 1), 0.6)
 
     def start_epoch(self):
         self.train_loss = 0.0
@@ -46,7 +49,7 @@ class CLnetwork:
     def end_epoch(self, valid_dataset):
         train_acc, train_mf1 = self.confusion_matrix.accuracy(), self.confusion_matrix.macro_f1()
         print(f'epoch: {self.epoch}, train loss: {self.train_loss:.3f}, train accuracy: {train_acc:.3f}, '
-              f'macro F1: {train_mf1:.3f}')
+              f"macro F1: {train_mf1:.3f}, lr: {self.optimizer.state_dict()['param_groups'][0]['lr']:.3f}")
         if (self.epoch + 1) % self.args.valid_epoch == 0:
             print(f'validating on the datasets...')
             valid_confusion = ConfusionMatrix(1)
@@ -60,6 +63,7 @@ class CLnetwork:
                 self.best_valid_acc = valid_acc
                 self.best_net = copy.deepcopy(self.net)
         self.epoch += 1
+        self.scheduler.step()
 
     def end_task(self):
         self.task += 1
