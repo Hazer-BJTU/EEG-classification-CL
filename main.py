@@ -32,7 +32,9 @@ if __name__ == '__main__':
     parser.add_argument('--dropout', type=float, nargs='?', default=0.5, help='drop out value')
     parser.add_argument('--weight_decay', type=float, nargs='?', default=1e-4, help='weight decay value')
     parser.add_argument('--lr', type=float, nargs='?', default=1e-3, help='learning rate')
+    parser.add_argument('--replay_mode', type=str, nargs='?', default='none', help='continual learning strategy')
+    parser.add_argument('--buffer_size', type=int, nargs='?', default=64, help='number of examples stored per task')
     args = parser.parse_args()
 
     R = train_k_fold(args)
-    write_format(R, args)
+    write_format(R, args, 'cl_output_record_' + args.replay_mode + '.txt')

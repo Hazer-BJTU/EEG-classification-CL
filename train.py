@@ -6,7 +6,11 @@ import sys
 
 def train_cl(args, trains, valids, tests):
     test_results = []
-    clnetwork = CLnetwork(args)
+    clnetwork = None
+    if args.replay_mode == 'none':
+        clnetwork = CLnetwork(args)
+    elif args.replay_mode == 'naive':
+        clnetwork = NaiveCLnetwork(args)
     confusion = ConfusionMatrix(args.task_num)
     print('start first testing...')
     confusion = evaluate_tasks(clnetwork.net, tests, confusion, clnetwork.device, args.valid_batch)
@@ -18,7 +22,10 @@ def train_cl(args, trains, valids, tests):
         for epoch in range(args.num_epochs):
             clnetwork.start_epoch()
             for X, y in train_loader:
-                clnetwork.observe(X, y)
+                if epoch == 0:
+                    clnetwork.observe(X, y, True)
+                else:
+                    clnetwork.observe(X, y, False)
             clnetwork.end_epoch(valids[task_idx])
         clnetwork.end_task()
         confusion.clear()
