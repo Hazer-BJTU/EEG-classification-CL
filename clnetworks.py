@@ -49,7 +49,7 @@ class CLnetwork:
     def end_epoch(self, valid_dataset):
         train_acc, train_mf1 = self.confusion_matrix.accuracy(), self.confusion_matrix.macro_f1()
         print(f'epoch: {self.epoch}, train loss: {self.train_loss:.3f}, train accuracy: {train_acc:.3f}, '
-              f"macro F1: {train_mf1:.3f}, lr: {self.optimizer.state_dict()['param_groups'][0]['lr']:.3f}")
+              f"macro F1: {train_mf1:.3f}, 1000 lr: {self.optimizer.state_dict()['param_groups'][0]['lr'] * 1000:.3f}")
         if (self.epoch + 1) % self.args.valid_epoch == 0:
             print(f'validating on the datasets...')
             valid_confusion = ConfusionMatrix(1)
