@@ -1,6 +1,7 @@
 from clnetworks import *
 from torch.utils.data import DataLoader
 from data_preprocessing import *
+from GEM import *
 import sys
 
 
@@ -11,6 +12,8 @@ def train_cl(args, trains, valids, tests):
         clnetwork = CLnetwork(args)
     elif args.replay_mode == 'naive':
         clnetwork = NaiveCLnetwork(args)
+    elif args.replay_mode == 'gem':
+        clnetwork = GEMCLnetwork(args)
     confusion = ConfusionMatrix(args.task_num)
     print('start first testing...')
     confusion = evaluate_tasks(clnetwork.net, tests, confusion, clnetwork.device, args.valid_batch)
