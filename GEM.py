@@ -105,9 +105,4 @@ class GEMCLnetwork(NaiveCLnetwork):
 
 
 if __name__ == '__main__':
-    clnetworks = GEMCLnetwork(args)
-    for i in range(3):
-        clnetworks.memory_buffer.append((torch.randn(128, 10, 258, 25), torch.zeros(128, 10, dtype=torch.int64)))
-    clnetworks.calc_old_gradient()
-    g_projected = clnetworks.gradient_projection(clnetworks.get_gradient())
-    clnetworks.rewrite_gradient(g_projected)
+    pass
