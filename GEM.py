@@ -27,10 +27,10 @@ class GEMCLnetwork(NaiveCLnetwork):
             if param.grad is not None:
                 starting, ending = self.grad_positions[idx][0], self.grad_positions[idx][1]
                 grads[starting:ending].copy_(param.grad.view(-1))
-            idx += 1
+                idx += 1
         return grads
 
-    def clac_old_gradient(self):
+    def calc_old_gradient(self):
         self.G = None
         print(f'calculating old gradients on {len(self.memory_buffer)} tasks...')
         for sample in self.memory_buffer:
@@ -53,15 +53,61 @@ class GEMCLnetwork(NaiveCLnetwork):
         a = np.eye(H.shape[0])
         b = np.zeros(H.shape[0])
         v = quadprog.solve_qp(H, -f, a, b)[0]
+        print(f'projection bias: {np.linalg.norm(v):.3f}')
         v = torch.tensor(v.astype(np.float32), dtype=torch.float32, requires_grad=False, device=self.device)
         g_projected = self.G.T @ torch.unsqueeze(v, dim=1)
         g_projected = torch.squeeze(g_projected, dim=1) + g
         return g_projected
+
+    def rewrite_gradient(self, g_projectd):
+        idx = 0
+        for param in self.net.parameters():
+            if param.grad is not None:
+                starting, ending = self.grad_positions[idx][0], self.grad_positions[idx][1]
+                target = g_projectd[starting:ending].view(param.grad.shape)
+                param.grad.copy_(target)
+                idx += 1
+
+    def start_task(self):
+        super(GEMCLnetwork, self).start_task()
+
+    def start_epoch(self):
+        super(GEMCLnetwork, self).start_epoch()
+
+    def observe(self, X, y, first_time=False):
+        if first_time:
+            self.reservoir_sampling(X, y)
+            print(f'sampling {self.buffer_counter} examples...')
+        X, y = X.to(self.device), y.to(self.device)
+        self.optimizer.zero_grad()
+        y_hat = self.net(X)
+        L_current = torch.sum(self.loss(y_hat, y.view(-1)))
+        L = L_current / X.shape[0]
+        L.backward()
+        if self.task > 0:
+            print(f'start gradient projection...')
+            g = self.get_gradient()
+            self.optimizer.zero_grad()
+            self.calc_old_gradient()
+            g_projected = self.gradient_projection(g)
+            self.rewrite_gradient(g_projected)
+            print(f'rewrite gradient finished.')
+        nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=20, norm_type=2)
+        self.optimizer.step()
+        self.train_loss += L.item()
+        self.confusion_matrix.count_task_separated(y_hat, y, 0)
+
+    def end_epoch(self, valid_dataset):
+        super(GEMCLnetwork, self).end_epoch(valid_dataset)
+
+    def end_task(self):
+        super(GEMCLnetwork, self).end_task()
 
 
 if __name__ == '__main__':
     clnetworks = GEMCLnetwork(args)
     for i in range(3):
         clnetworks.memory_buffer.append((torch.randn(128, 10, 258, 25), torch.zeros(128, 10, dtype=torch.int64)))
-    clnetworks.clac_old_gradient()
-    clnetworks.gradient_projection(clnetworks.get_gradient())
+    clnetworks.calc_old_gradient()
+    g_projected = clnetworks.gradient_projection(clnetworks.get_gradient())
+    clnetworks.rewrite_gradient(g_projected)
