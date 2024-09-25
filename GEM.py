@@ -36,7 +36,7 @@ class GEMCLnetwork(NaiveCLnetwork):
             self.optimizer.zero_grad()
             X_replay, y_replay = sample[0].to(self.device), sample[1].to(self.device)
             y_hat_replay = self.net(X_replay)
-            L_replay = torch.sum(self.loss(y_hat_replay, y_replay.view(-1)))
+            L_replay = torch.sum(self.loss(y_hat_replay, y_replay.view(-1))) / X_replay.shape[0]
             L_replay.backward()
             if self.G is None:
                 self.G = torch.unsqueeze(self.get_gradient(), dim=0)
@@ -45,13 +45,13 @@ class GEMCLnetwork(NaiveCLnetwork):
                 self.G = torch.cat((self.G, gk), dim=0)
 
     def gradient_projection(self, g, eps=1e-3, margin=0.001):
-        factor = 0
+        factor = torch.norm(g).item() / (self.G.shape[0] + 1)
         for idx in range(self.G.shape[0]):
-            factor += torch.norm(self.G[idx]).item() / self.G.shape[0]
+            factor += torch.norm(self.G[idx]).item() / (self.G.shape[0] + 1)
         H = (self.G / factor) @ (self.G.T / factor)
         H = H.cpu().numpy().astype(np.double)
         H = 0.5 * (H + H.transpose()) + np.eye(H.shape[0]) * eps
-        f = (self.G / factor) @ (torch.unsqueeze(g, dim=1) / torch.norm(g))
+        f = (self.G / factor) @ (torch.unsqueeze(g, dim=1) / factor)
         f = torch.squeeze(f, dim=1).cpu().numpy().astype(np.double)
         a = np.eye(H.shape[0])
         b = np.zeros(H.shape[0]) + margin
