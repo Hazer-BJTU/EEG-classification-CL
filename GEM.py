@@ -2,7 +2,6 @@ import torch
 from clnetworks import *
 import quadprog
 import numpy as np
-from main import args
 
 
 class GEMCLnetwork(NaiveCLnetwork):
