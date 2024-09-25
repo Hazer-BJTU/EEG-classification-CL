@@ -54,7 +54,6 @@ class ConfusionMatrix:
         else:
             return mf1
 
-
     def clear(self):
         self.mat.zero_()
 
