@@ -2,6 +2,7 @@ import torch
 from clnetworks import *
 import numpy as np
 from main import args
+from packnetSGD import PacknetSGD
 
 
 class PackNetCLnetwork(CLnetwork):
@@ -74,7 +75,7 @@ class PackNetCLnetwork(CLnetwork):
         self.epoch = 0
         self.best_net = copy.deepcopy(self.net)
         self.best_train_loss, self.best_train_acc, self.best_valid_acc = 0.0, 0.0, 0.0
-        self.optimizer = torch.optim.SGD(self.net.parameters(), lr=self.args.lr * 10)
+        self.optimizer = PacknetSGD(self.net.parameters(), lr=self.args.lr * 10)
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, max(self.args.num_epochs // 6, 1), 0.6)
         self.start_fine_tuning = False
 
@@ -120,7 +121,8 @@ class PackNetCLnetwork(CLnetwork):
                 self.best_train_loss = self.train_loss
                 self.best_train_acc = train_acc
                 self.best_valid_acc = valid_acc
-                self.best_net = copy.deepcopy(self.net)
+                self.best_net = './modelsaved/' + str(self.args.replay_mode) + '_task' + str(self.task) + '.pth'
+                torch.save(self.net.state_dict(), self.best_net)
         self.epoch += 1
         self.scheduler.step()
 

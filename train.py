@@ -37,12 +37,12 @@ def train_cl(args, trains, valids, tests):
         clnetwork.end_task()
         confusion.clear()
         print(f'start testing...')
+        bestnet = SeqSleepNet()
+        bestnet.load_state_dict(torch.load(clnetwork.best_net_memory[task_idx], weights_only=True))
         if args.replay_mode == 'packnet':
-            confusion = evaluate_tasks_packnet(clnetwork.best_net_memory[task_idx], tests, confusion,
-                                               clnetwork.device, clnetwork, args.valid_batch)
+            confusion = evaluate_tasks_packnet(bestnet, tests, confusion, clnetwork.device, clnetwork, args.valid_batch)
         else:
-            confusion = evaluate_tasks(clnetwork.best_net_memory[task_idx], tests, confusion,
-                                       clnetwork.device, args.valid_batch)
+            confusion = evaluate_tasks(bestnet, tests, confusion, clnetwork.device, args.valid_batch)
         test_results.append((confusion.accuracy(), confusion.macro_f1()))
     return test_results
 

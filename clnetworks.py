@@ -61,7 +61,8 @@ class CLnetwork:
                 self.best_train_loss = self.train_loss
                 self.best_train_acc = train_acc
                 self.best_valid_acc = valid_acc
-                self.best_net = copy.deepcopy(self.net)
+                self.best_net = './modelsaved/' + str(self.args.replay_mode) + '_task' + str(self.task) + '.pth'
+                torch.save(self.net.state_dict(), self.best_net)
         self.epoch += 1
         self.scheduler.step()
 
