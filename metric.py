@@ -63,6 +63,7 @@ class ConfusionMatrix:
 
 
 def evaluate(net, loader, confusion_matrix, device):
+    net.to(device)
     net.eval()
     with torch.no_grad():
         for X, y, t in loader:
@@ -101,6 +102,7 @@ def evaluate_tasks_packnet(net, datasets, confusion_matrix, device, clnetwork, b
                     cnt += 1
             else:
                 print(f'start testing without masking parameters on dataset {idx}...')
+            masked_net.to(device)
             masked_net.eval()
             loader = DataLoader(datasets[idx], batch_size=batch_size, shuffle=False)
             for X, y in loader:
