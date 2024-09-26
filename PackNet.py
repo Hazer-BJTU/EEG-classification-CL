@@ -22,15 +22,19 @@ class PackNetCLnetwork(CLnetwork):
         self.proportion = self.grad_number // args.task_num + 1
         self.fixed_numbers = 0
         self.start_fine_tuning = False
+        self.using_list = []
 
     def mask_gradient(self):
         idx = 0
         for param in self.net.parameters():
-            if param.grad is not None:
-                starting, ending = self.grad_positions[idx][0], self.grad_positions[idx][1]
+            starting, ending = self.grad_positions[idx][0], self.grad_positions[idx][1]
+            if self.start_fine_tuning:
+                target = self.fixed[starting:ending] * self.using[starting:ending]
+                target = target.view(param.grad.shape)
+            else:
                 target = self.fixed[starting:ending].view(param.grad.shape)
-                param.grad *= target
-                idx += 1
+            param.grad *= target
+            idx += 1
 
     def mask_params(self):
         idx = 0
@@ -70,7 +74,7 @@ class PackNetCLnetwork(CLnetwork):
         self.epoch = 0
         self.best_net = copy.deepcopy(self.net)
         self.best_train_loss, self.best_train_acc, self.best_valid_acc = 0.0, 0.0, 0.0
-        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=self.args.lr)
+        self.optimizer = torch.optim.SGD(self.net.parameters(), lr=self.args.lr)
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, max(self.args.num_epochs // 6, 1), 0.6)
         self.start_fine_tuning = False
 
@@ -122,6 +126,7 @@ class PackNetCLnetwork(CLnetwork):
 
     def end_task(self):
         super(PackNetCLnetwork, self).end_task()
+        self.using_list.append(self.using.clone())
         self.fix_params()
 
 

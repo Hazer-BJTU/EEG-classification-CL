@@ -17,6 +17,7 @@ def train_cl(args, trains, valids, tests):
         clnetwork = GEMCLnetwork(args)
     elif args.replay_mode == 'packnet':
         args.dropout, args.weight_decay = 0, 0
+        args.lr *= 10
         clnetwork = PackNetCLnetwork(args)
     confusion = ConfusionMatrix(args.task_num)
     print('start first testing...')
