@@ -18,7 +18,7 @@ class PackNetCLnetwork(CLnetwork):
                 self.grad_positions.append((self.grad_number, self.grad_number + grad_length))
                 self.grad_number += grad_length
         self.fixed = torch.ones(self.grad_number, dtype=torch.float32, requires_grad=False, device=self.device)
-        self.using = torch.ones(self.grad_number, dtype=torch.float32, requires_grad=False, device=self.device)
+        self.using = torch.zeros(self.grad_number, dtype=torch.float32, requires_grad=False, device=self.device)
         self.proportion = self.grad_number // args.task_num + 1
         self.fixed_numbers = 0
         self.start_fine_tuning = False
@@ -36,32 +36,29 @@ class PackNetCLnetwork(CLnetwork):
         idx = 0
         with torch.no_grad():
             for param in self.net.parameters():
-                if param.grad is not None:
-                    starting, ending = self.grad_positions[idx][0], self.grad_positions[idx][1]
-                    target = self.using[starting:ending].view(param.data.shape)
-                    param.data *= target
-                    idx += 1
+                starting, ending = self.grad_positions[idx][0], self.grad_positions[idx][1]
+                target = self.using[starting:ending].view(param.data.shape)
+                param.data *= target
+                idx += 1
 
     def get_params(self):
         idx = 0
         parameters = torch.zeros(self.grad_number, dtype=torch.float32, requires_grad=False, device=self.device)
         for param in self.net.parameters():
-            if param.grad is not None:
-                starting, ending = self.grad_positions[idx][0], self.grad_positions[idx][1]
-                parameters[starting:ending].copy_(param.data.view(-1))
-                idx += 1
+            starting, ending = self.grad_positions[idx][0], self.grad_positions[idx][1]
+            parameters[starting:ending].copy_(param.data.view(-1))
+            idx += 1
         return parameters
 
     def sort_params(self):
-        parameters = self.get_params()
+        parameters = self.get_params().pow(2) * self.fixed
         parameters_left = self.grad_number - self.fixed_numbers
         print(f'flexible parameters left: {parameters_left}')
-        self.using.copy_(1 - self.fixed)
         if parameters_left <= self.proportion:
             self.using.fill_(1)
         else:
             params_sorted, idx_lst = torch.sort(parameters, descending=True)
-            self.using.index_fill_(0, idx_lst[self.fixed_numbers:self.fixed_numbers + self.proportion], 1)
+            self.using.index_fill_(0, idx_lst[0:self.proportion], 1)
         print('parameter masks updated.')
 
     def fix_params(self):
@@ -100,7 +97,28 @@ class PackNetCLnetwork(CLnetwork):
         self.confusion_matrix.count_task_separated(y_hat, y, 0)
 
     def end_epoch(self, valid_dataset):
-        super(PackNetCLnetwork, self).end_epoch(valid_dataset)
+        train_acc, train_mf1 = self.confusion_matrix.accuracy(), self.confusion_matrix.macro_f1()
+        print(f'epoch: {self.epoch}, train loss: {self.train_loss:.3f}, train accuracy: {train_acc:.3f}, '
+              f"macro F1: {train_mf1:.3f}, 1000 lr: {self.optimizer.state_dict()['param_groups'][0]['lr'] * 1000:.3f}")
+        print(f'flexible numbers: {int(torch.sum(self.fixed).item())}, ', end='')
+        if self.start_fine_tuning:
+            print(f'using numbers: {int(torch.sum(self.using).item())}')
+        else:
+            print(f'using numbers: all')
+        if (self.epoch + 1) % self.args.valid_epoch == 0:
+            print(f'validating on the datasets...')
+            valid_confusion = ConfusionMatrix(1)
+            valid_confusion = evaluate_tasks(self.net, [valid_dataset], valid_confusion,
+                                             self.device, self.args.valid_batch)
+            valid_acc, valid_mf1 = valid_confusion.accuracy(), valid_confusion.macro_f1()
+            print(f'valid accuracy: {valid_acc:.3f}, valid macro F1: {valid_mf1:.3f}')
+            if self.start_fine_tuning and valid_acc > self.best_valid_acc:
+                self.best_train_loss = self.train_loss
+                self.best_train_acc = train_acc
+                self.best_valid_acc = valid_acc
+                self.best_net = copy.deepcopy(self.net)
+        self.epoch += 1
+        self.scheduler.step()
 
     def end_task(self):
         super(PackNetCLnetwork, self).end_task()
@@ -111,11 +129,21 @@ if __name__ == '__main__':
     clnetwork = PackNetCLnetwork(args)
     clnetwork.start_task()
     clnetwork.sort_params()
-    clnetwork.fix_params()
+    print(f'flexible numbers: {int(torch.sum(clnetwork.fixed).item())}, ', end='')
+    print(f'using numbers: {int(torch.sum(clnetwork.using).item())}')
+    clnetwork.end_task()
+    clnetwork.start_task()
     clnetwork.sort_params()
-    clnetwork.fix_params()
+    print(f'flexible numbers: {int(torch.sum(clnetwork.fixed).item())}, ', end='')
+    print(f'using numbers: {int(torch.sum(clnetwork.using).item())}')
+    clnetwork.end_task()
+    clnetwork.start_task()
     clnetwork.sort_params()
-    clnetwork.fix_params()
+    print(f'flexible numbers: {int(torch.sum(clnetwork.fixed).item())}, ', end='')
+    print(f'using numbers: {int(torch.sum(clnetwork.using).item())}')
+    clnetwork.end_task()
+    clnetwork.start_task()
     clnetwork.sort_params()
-    clnetwork.fix_params()
-    clnetwork.sort_params()
+    print(f'flexible numbers: {int(torch.sum(clnetwork.fixed).item())}, ', end='')
+    print(f'using numbers: {int(torch.sum(clnetwork.using).item())}')
+    clnetwork.end_task()
