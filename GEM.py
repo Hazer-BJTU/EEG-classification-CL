@@ -44,7 +44,7 @@ class GEMCLnetwork(NaiveCLnetwork):
                 gk = torch.unsqueeze(self.get_gradient(), dim=0)
                 self.G = torch.cat((self.G, gk), dim=0)
 
-    def gradient_projection(self, g, eps=1e-3, margin=0.1):
+    def gradient_projection(self, g, eps=1e-3, margin=0.1, coef=5):
         factor = torch.norm(g).item() / (self.G.shape[0] + 1)
         for idx in range(self.G.shape[0]):
             factor += torch.norm(self.G[idx]).item() / (self.G.shape[0] + 1)
@@ -55,7 +55,7 @@ class GEMCLnetwork(NaiveCLnetwork):
         f = torch.squeeze(f, dim=1).cpu().numpy().astype(np.double)
         a = np.eye(H.shape[0])
         b = np.zeros(H.shape[0]) + margin
-        v = quadprog.solve_qp(H, -f, a, b)[0] * 3
+        v = quadprog.solve_qp(H, -f, a, b)[0] * coef
         print(f'projection vector: {np.round(v, 3)}')
         v = torch.tensor(v.astype(np.float32), dtype=torch.float32, requires_grad=False, device=self.device)
         g_projected = self.G.T @ torch.unsqueeze(v, dim=1)
