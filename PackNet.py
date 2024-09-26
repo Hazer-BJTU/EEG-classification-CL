@@ -1,8 +1,6 @@
 import torch
 from clnetworks import *
 import numpy as np
-from main import args
-from packnetSGD import PacknetSGD
 
 
 class PackNetCLnetwork(CLnetwork):
