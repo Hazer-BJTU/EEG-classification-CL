@@ -55,7 +55,7 @@ class GEMCLnetwork(NaiveCLnetwork):
         f = torch.squeeze(f, dim=1).cpu().numpy().astype(np.double)
         a = np.eye(H.shape[0])
         b = np.zeros(H.shape[0]) + margin
-        v = quadprog.solve_qp(H, -f, a, b)[0]
+        v = quadprog.solve_qp(H, -f, a, b)[0] * 3
         print(f'projection vector: {np.round(v, 3)}')
         v = torch.tensor(v.astype(np.float32), dtype=torch.float32, requires_grad=False, device=self.device)
         g_projected = self.G.T @ torch.unsqueeze(v, dim=1)
