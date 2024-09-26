@@ -75,7 +75,7 @@ class PackNetCLnetwork(CLnetwork):
         self.epoch = 0
         self.best_net = copy.deepcopy(self.net)
         self.best_train_loss, self.best_train_acc, self.best_valid_acc = 0.0, 0.0, 0.0
-        self.optimizer = PacknetSGD(self.net.parameters(), lr=self.args.lr * 10)
+        self.optimizer = torch.optim.SGD(self.net.parameters(), lr=self.args.lr * 10)
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, max(self.args.num_epochs // 6, 1), 0.6)
         self.start_fine_tuning = False
 
@@ -95,7 +95,6 @@ class PackNetCLnetwork(CLnetwork):
         L_current = torch.sum(self.loss(y_hat, y.view(-1)))
         L = L_current / X.shape[0]
         L.backward()
-        nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=20, norm_type=2)
         self.mask_gradient()
         self.optimizer.step()
         self.train_loss += L.item()

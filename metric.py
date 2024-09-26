@@ -88,23 +88,23 @@ def evaluate_tasks(net, datasets, confusion_matrix, device, batch_size=1):
 def evaluate_tasks_packnet(net, datasets, confusion_matrix, device, clnetwork, batch_size=1):
     using_list = clnetwork.using_list
     grad_positions = clnetwork.grad_positions
-    with torch.no_grad():
-        for idx in range(len(datasets)):
-            masked_net = copy.deepcopy(net)
-            if idx < len(using_list):
-                print(f'start masking parameters, testing on dataset {idx}, '
-                      f'parameters size {int(torch.sum(using_list[idx]).item())}')
-                cnt = 0
-                for param in masked_net.parameters():
-                    starting, ending = grad_positions[cnt][0], grad_positions[cnt][1]
-                    target = using_list[idx][starting:ending].view(param.data.shape)
-                    param.data *= target
-                    cnt += 1
-            else:
-                print(f'start testing without masking parameters on dataset {idx}...')
-            masked_net.to(device)
-            masked_net.eval()
-            loader = DataLoader(datasets[idx], batch_size=batch_size, shuffle=False)
+    for idx in range(len(datasets)):
+        masked_net = copy.deepcopy(net)
+        masked_net.to(device)
+        if idx < len(using_list):
+            print(f'start masking parameters, testing on dataset {idx}, '
+                  f'parameters size {int(torch.sum(using_list[idx]).item())}')
+            cnt = 0
+            for param in masked_net.parameters():
+                starting, ending = grad_positions[cnt][0], grad_positions[cnt][1]
+                target = using_list[idx][starting:ending].view(param.data.shape)
+                param.data *= target
+                cnt += 1
+        else:
+            print(f'start testing without masking parameters on dataset {idx}...')
+        masked_net.eval()
+        loader = DataLoader(datasets[idx], batch_size=batch_size, shuffle=False)
+        with torch.no_grad():
             for X, y in loader:
                 X, y = X.to(device), y.to(device)
                 y_hat = masked_net(X)
