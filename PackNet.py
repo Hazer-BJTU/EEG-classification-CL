@@ -16,8 +16,8 @@ class PackNetCLnetwork(CLnetwork):
                 grad_length = param.grad.view(-1).shape[0]
                 self.grad_positions.append((self.grad_number, self.grad_number + grad_length))
                 self.grad_number += grad_length
-        self.fixed = torch.ones(self.grad_number, dtype=torch.float32, requires_grad=False, device=self.device)
-        self.using = torch.zeros(self.grad_number, dtype=torch.float32, requires_grad=False, device=self.device)
+        self.fixed = torch.ones(self.grad_number, dtype=torch.bool, requires_grad=False, device=self.device)
+        self.using = torch.zeros(self.grad_number, dtype=torch.bool, requires_grad=False, device=self.device)
         self.proportion = self.grad_number // args.task_num + 1
         self.fixed_numbers = 0
         self.start_fine_tuning = False
@@ -66,7 +66,7 @@ class PackNetCLnetwork(CLnetwork):
 
     def fix_params(self):
         self.fixed_numbers = int(torch.sum(self.using).item())
-        self.fixed.copy_(1 - self.using)
+        self.fixed.copy_(self.using ^ 1)
         print('parameters fixed.')
 
     def start_task(self):
@@ -130,24 +130,4 @@ class PackNetCLnetwork(CLnetwork):
 
 
 if __name__ == '__main__':
-    clnetwork = PackNetCLnetwork(args)
-    clnetwork.start_task()
-    clnetwork.sort_params()
-    print(f'flexible numbers: {int(torch.sum(clnetwork.fixed).item())}, ', end='')
-    print(f'using numbers: {int(torch.sum(clnetwork.using).item())}')
-    clnetwork.end_task()
-    clnetwork.start_task()
-    clnetwork.sort_params()
-    print(f'flexible numbers: {int(torch.sum(clnetwork.fixed).item())}, ', end='')
-    print(f'using numbers: {int(torch.sum(clnetwork.using).item())}')
-    clnetwork.end_task()
-    clnetwork.start_task()
-    clnetwork.sort_params()
-    print(f'flexible numbers: {int(torch.sum(clnetwork.fixed).item())}, ', end='')
-    print(f'using numbers: {int(torch.sum(clnetwork.using).item())}')
-    clnetwork.end_task()
-    clnetwork.start_task()
-    clnetwork.sort_params()
-    print(f'flexible numbers: {int(torch.sum(clnetwork.fixed).item())}, ', end='')
-    print(f'using numbers: {int(torch.sum(clnetwork.using).item())}')
-    clnetwork.end_task()
+    pass
