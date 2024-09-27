@@ -74,6 +74,7 @@ def evaluate(net, loader, confusion_matrix, device):
 
 
 def evaluate_tasks(net, datasets, confusion_matrix, device, batch_size=1):
+    net.to(device)
     net.eval()
     with torch.no_grad():
         for idx in range(len(datasets)):
