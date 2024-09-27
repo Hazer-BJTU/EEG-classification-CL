@@ -44,7 +44,7 @@ class GEMCLnetwork(NaiveCLnetwork):
                 gk = torch.unsqueeze(self.get_gradient(), dim=0)
                 self.G = torch.cat((self.G, gk), dim=0)
 
-    def gradient_projection(self, g, eps=1e-3, margin=0.5, coef=3):
+    def gradient_projection(self, g, eps=1e-3, margin=0.5, coef=5):
         factor = torch.norm(g).item() / (self.G.shape[0] + 1)
         for idx in range(self.G.shape[0]):
             factor += torch.norm(self.G[idx]).item() / (self.G.shape[0] + 1)
