@@ -48,6 +48,17 @@ class CGRnetwork(NaiveCLnetwork):
         y_hat = self.net(X)
         L_current = torch.sum(self.loss(y_hat, y.view(-1)))
         L = L_current / X.shape[0]
+        '''start generative replay'''
+        replay_number = 0
+        for sample in self.memory_buffer:
+            replay_number += sample[1].shape[0]
+        print(f'generative replay on {len(self.memory_buffer)} tasks and {replay_number} examples...')
+        for sample, gmodel in zip(self.memory_buffer, self.generator_memories):
+            y_replay = sample[1].to(self.device)
+            X_replay = gmodel(y_replay)
+            y_hat_replay = self.net(X_replay)
+            L_replay = torch.sum(self.loss(y_hat_replay, y_replay.view(-1)))
+            L = L + L_replay / replay_number
         L.backward()
         nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=20, norm_type=2)
         self.optimizer.step()
@@ -59,6 +70,7 @@ class CGRnetwork(NaiveCLnetwork):
         X_fake = self.generator(y)
         y_hat = self.net(X_fake)
         L_G = torch.sum(self.loss(y_hat, y.view(-1))) / X_fake.shape[0]
+        L_G = L_G + self.args.cgr_coef * torch.sum((X_fake - X).pow(2) / X.shape[0] / X.shape[1]) / X.shape[2] / X.shape[3]
         L_G.backward()
         nn.utils.clip_grad_norm_(self.generator.parameters(), max_norm=20, norm_type=2)
         self.optimizerG.step()

@@ -21,7 +21,7 @@ class Label2Vec(nn.Module):
 
 
 class GenerativeGRU(nn.Module):
-    def __init__(self, input_size, hiddens, layers, dropout, mean=0, std=1, **kwargs):
+    def __init__(self, input_size, hiddens, layers, dropout, mean=0, std=3, **kwargs):
         super(GenerativeGRU, self).__init__(**kwargs)
         self.input_size = input_size
         self.hiddens = hiddens
