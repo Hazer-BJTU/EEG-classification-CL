@@ -32,7 +32,7 @@ class GenerativeGRU(nn.Module):
                               dropout=dropout, bidirectional=True)
 
     def get_initial_states(self, batch_size, device):
-        return torch.normal(self.mean, self.std, (2 * self.layers, batch_size, self.hiddens), device=device)
+        return torch.zeros((2 * self.layers, batch_size, self.hiddens), device=device)
 
     def forward(self, X):
         batch_size, seq_length, features = X.shape[0], X.shape[1], X.shape[2]
@@ -74,19 +74,94 @@ class GenerativeNetwork(nn.Module):
         self.dropout = dropout
         self.channels = channels
         self.label2vec = Label2Vec(64)
-        self.rnn = GenerativeGRU(64, 200, 2, dropout)
-        self.linear = LinearNetwork(16, 25, 128, 129 * channels, dropout)
+        self.rnn = GenerativeGRU(128, 225, 2, dropout)
+        self.linear = LinearNetwork(18, 25, 128, 129 * channels, dropout)
+        self.tanh = nn.Tanh()
 
-    def forward(self, X):
+    def forward(self, X, noise):
         X = self.label2vec(X)
+        X = torch.cat((X, noise), dim=2)
         X = self.rnn(X)
         X = self.linear(X)
+        X = self.tanh(X)
+        return X
+
+
+class AntiLinear(nn.Module):
+    def __init__(self, input_features, hiddens, output_features, dropout, **kwargs):
+        super(AntiLinear, self).__init__(**kwargs)
+        self.input_features = input_features
+        self.output_features = output_features
+        self.dropout = dropout
+        self.block = nn.Sequential(
+            nn.Conv1d(input_features, hiddens, kernel_size=5, stride=1, padding=0),
+            nn.ReLU(), nn.Dropout(dropout),
+            nn.Conv1d(hiddens, hiddens, kernel_size=3, stride=1, padding=0),
+            nn.ReLU(), nn.Dropout(dropout),
+            nn.Conv1d(hiddens, output_features, kernel_size=3, stride=1, padding=0),
+            nn.MaxPool1d(kernel_size=4, stride=4)
+        )
+
+    def forward(self, X):
+        batch_size, length, F, T = X.shape[0], X.shape[1], X.shape[2], X.shape[3]
+        if not X.is_contiguous():
+            X = X.contiguous
+        X = X.view(-1, F, T)
+        output = self.block(X)
+        output = output.view(batch_size, length, self.output_features, -1)
+        return output
+
+
+class DiscrimitiveGRU(nn.Module):
+    def __init__(self, input_size, hiddens, layers, dropout, **kwargs):
+        super(DiscrimitiveGRU, self).__init__(**kwargs)
+        self.input_size = input_size
+        self.hiddens = hiddens
+        self.layers = layers
+        self.dropout = dropout
+        self.network = nn.GRU(input_size, hiddens, num_layers=layers, batch_first=True,
+                              dropout=dropout, bidirectional=True)
+
+    def get_initial_states(self, batch_size, device):
+        return torch.zeros((2 * self.layers, batch_size, self.hiddens), device=device)
+
+    def forward(self, X):
+        batch_size, seq_length, features = X.shape[0], X.shape[1], X.shape[2]
+        H0 = self.get_initial_states(batch_size, X.device)
+        (output, Hn) = self.network(X, H0)
+        if not output.is_contiguous():
+            output = output.contiguous()
+        return output
+
+
+class DiscrimitiveNetwork(nn.Module):
+    def __init__(self, dropout, channels, **kwargs):
+        super(DiscrimitiveNetwork, self).__init__(**kwargs)
+        self.antilinear = AntiLinear(129 * channels, 64, 16, dropout)
+        self.label2vec = Label2Vec(64)
+        self.rnn = DiscrimitiveGRU(128, 172, 2, dropout)
+        self.classifier = nn.Sequential(
+            nn.Linear(344, 172),
+            nn.ReLU(), nn.Dropout(dropout),
+            nn.Linear(172, 128),
+            nn.ReLU(), nn.Dropout(dropout),
+            nn.Linear(128, 1)
+        )
+
+    def forward(self, X, y):
+        Y = self.label2vec(y)
+        X = self.antilinear(X).view(X.shape[0], X.shape[1], -1)
+        X = torch.cat((X, Y), dim=2)
+        X = self.rnn(X)
+        X = X.view(-1, X.shape[2])
+        X = self.classifier(X)
         return X
 
 
 if __name__ == '__main__':
-    net = GenerativeNetwork(0.25)
-    X = torch.randint(0, 5, (16, 10))
-    print(X.shape)
-    print(net(X).shape)
+    net = GenerativeNetwork(0.1, 2)
+    X = torch.randint(0, 5, (16, 10), dtype=torch.int64, device='cpu')
+    noise = torch.randn(16, 10, 64)
+    print(net(X, noise).shape)
     torch.save(net.state_dict(), 'generative_network.pth')
+    torch.save(DiscrimitiveNetwork(0.1, 2).state_dict(), 'discrimitive_network.pth')
