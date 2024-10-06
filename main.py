@@ -34,6 +34,7 @@ parser.add_argument('--replay_mode', type=str, nargs='?', default='none', help='
 parser.add_argument('--buffer_size', type=int, nargs='?', default=16, help='number of examples stored per task')
 parser.add_argument('--channels_num', type=int, nargs='?', default=2, help='number of channels')
 parser.add_argument('--cgr_coef', type=int, nargs='?', default=1e-3, help='loss coefficient for CGR')
+parser.add_argument('--gan_lr', type=float, nargs='?', default=1e-4, help='learning rate for GAN')
 args = parser.parse_args()
 
 if __name__ == '__main__':
