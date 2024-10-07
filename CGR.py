@@ -10,7 +10,7 @@ class CGRnetwork(NaiveCLnetwork):
         super(CGRnetwork, self).__init__(args)
         self.generator_memories = []
         self.generator = GenerativeNetwork(0, args.channels_num)
-        self.discriminator = DiscrimitiveNetwork(0.5, args.channels_num)
+        self.discriminator = DiscrimitiveNetwork(0.75, args.channels_num)
         self.generator.apply(init_weight)
         self.discriminator.apply(init_weight)
         self.generator.to(self.device)
@@ -98,6 +98,7 @@ class CGRnetwork(NaiveCLnetwork):
         self.train_loss += L.item()
         self.confusion_matrix.count_task_separated(y_hat, y, 0)
         '''start training generator'''
+        self.generator.train()
         mean = self.running_mean
         var = (self.running_mean_sqr - self.running_mean.pow(2)) * (self.observed_samples / (self.observed_samples - 1))
         var = var.pow(0.5) + 1e-3
@@ -115,9 +116,10 @@ class CGRnetwork(NaiveCLnetwork):
         nn.utils.clip_grad_norm_(self.generator.parameters(), max_norm=20, norm_type=2)
         self.optimizerG.step()
         '''start training discriminator'''
+        self.discriminator.train()
         label_r = torch.ones(y.shape[0] * y.shape[1], dtype=torch.float32, requires_grad=False, device=self.device)
         label_g = torch.zeros(y.shape[0] * y.shape[1], dtype=torch.float32, requires_grad=False, device=self.device)
-        noise = torch.randn(X.shape, dtype=torch.float32, requires_grad=False, device=self.device)
+        noise = 3 * torch.randn(X.shape, dtype=torch.float32, requires_grad=False, device=self.device)
         self.optimizerG.zero_grad()
         self.optimizerD.zero_grad()
         y_real = self.discriminator((X - mean) / var + noise, y)
@@ -127,9 +129,8 @@ class CGRnetwork(NaiveCLnetwork):
         L_g = self.bceloss(y_g.view(-1), label_g)
         self.adloss[1] += L_g.item()
         (L_real + L_g).backward()
-        if random.random() < self.adloss[1] / self.adloss[0]:
-            nn.utils.clip_grad_norm_(self.discriminator.parameters(), max_norm=20, norm_type=2)
-            self.optimizerD.step()
+        nn.utils.clip_grad_norm_(self.discriminator.parameters(), max_norm=20, norm_type=2)
+        self.optimizerD.step()
 
     def end_epoch(self, valid_dataset):
         train_acc, train_mf1 = self.confusion_matrix.accuracy(), self.confusion_matrix.macro_f1()

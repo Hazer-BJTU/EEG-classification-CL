@@ -52,11 +52,11 @@ class LinearNetwork(nn.Module):
         self.output_features = output_features
         self.dropout = dropout
         self.block = nn.Sequential(
-            nn.Conv1d(input_features, hiddens, kernel_size=1, stride=1, padding=0),
+            nn.Conv1d(input_features, hiddens, kernel_size=3, stride=1, padding=1),
             nn.ReLU(), nn.Dropout(dropout),
-            nn.Conv1d(hiddens, hiddens, kernel_size=1, stride=1, padding=0),
+            nn.Conv1d(hiddens, hiddens, kernel_size=3, stride=1, padding=1),
             nn.ReLU(), nn.Dropout(dropout),
-            nn.Conv1d(hiddens, output_features, kernel_size=1, stride=1, padding=0)
+            nn.Conv1d(hiddens, output_features, kernel_size=3, stride=1, padding=1)
         )
 
     def forward(self, X):
@@ -74,16 +74,14 @@ class GenerativeNetwork(nn.Module):
         self.dropout = dropout
         self.channels = channels
         self.label2vec = Label2Vec(64)
-        self.rnn = GenerativeGRU(128, 225, 2, dropout)
-        self.linear = LinearNetwork(18, 25, 128, 129 * channels, dropout)
-        self.tanh = nn.Tanh()
+        self.rnn = GenerativeGRU(128, 300, 2, dropout)
+        self.linear = LinearNetwork(24, 25, 128, 129 * channels, dropout)
 
     def forward(self, X, noise):
         X = self.label2vec(X)
         X = torch.cat((X, noise), dim=2)
         X = self.rnn(X)
         X = self.linear(X)
-        X = self.tanh(X)
         return X
 
 
