@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from models import *
 
 
 class Label2Vec(nn.Module):
@@ -20,14 +21,13 @@ class Label2Vec(nn.Module):
         return output
 
 
-class GenerativeGRU(nn.Module):
-    def __init__(self, input_size, hiddens, layers, dropout, mean=0, std=1, **kwargs):
-        super(GenerativeGRU, self).__init__(**kwargs)
+class GRUblock(nn.Module):
+    def __init__(self, input_size, hiddens, layers, dropout, **kwargs):
+        super(GRUblock, self).__init__(**kwargs)
         self.input_size = input_size
         self.hiddens = hiddens
         self.layers = layers
         self.dropout = dropout
-        self.mean, self.std = mean, std
         self.network = nn.GRU(input_size, hiddens, num_layers=layers, batch_first=True,
                               dropout=dropout, bidirectional=True)
 
@@ -35,7 +35,7 @@ class GenerativeGRU(nn.Module):
         return torch.zeros((2 * self.layers, batch_size, self.hiddens), device=device)
 
     def forward(self, X):
-        batch_size, seq_length, features = X.shape[0], X.shape[1], X.shape[2]
+        batch_size, seq_length = X.shape[0], X.shape[1]
         H0 = self.get_initial_states(batch_size, X.device)
         (output, Hn) = self.network(X, H0)
         if not output.is_contiguous():
@@ -43,123 +43,104 @@ class GenerativeGRU(nn.Module):
         return output
 
 
-class LinearNetwork(nn.Module):
-    def __init__(self, input_features, length, hiddens, output_features, dropout, **kwargs):
-        super(LinearNetwork, self).__init__(**kwargs)
-        self.input_features = input_features
-        self.length = length
+class Upsample(nn.Module):
+    def __init__(self, input_channels, hiddens, output_channels, **kwargs):
+        super(Upsample, self).__init__(**kwargs)
+        self.input_channels = input_channels
         self.hiddens = hiddens
-        self.output_features = output_features
-        self.dropout = dropout
-        self.block = nn.Sequential(
-            nn.Conv1d(input_features, hiddens, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(), nn.Dropout(dropout),
-            nn.Conv1d(hiddens, hiddens, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(), nn.Dropout(dropout),
-            nn.Conv1d(hiddens, output_features, kernel_size=3, stride=1, padding=1)
+        self.output_channels = output_channels
+        self.network = nn.Sequential(
+            nn.Conv1d(input_channels, hiddens[0], kernel_size=5, stride=1, padding=2),
+            nn.ReLU(), nn.BatchNorm1d(hiddens[0]),
+            nn.Conv1d(hiddens[0], hiddens[1], kernel_size=3, stride=1, padding=1),
+            nn.ReLU(), nn.BatchNorm1d(hiddens[1]),
+            nn.Conv1d(hiddens[1], hiddens[2], kernel_size=3, stride=1, padding=1),
+            nn.ReLU(), nn.BatchNorm1d(hiddens[2]),
+            nn.Conv1d(hiddens[2], output_channels, kernel_size=3, stride=1, padding=1)
         )
 
     def forward(self, X):
-        batch_size, seq_length, features = X.shape[0], X.shape[1], X.shape[2]
-        assert features % self.length == 0
-        X = X.view(batch_size * seq_length, features // self.length, self.length)
-        output = self.block(X)
-        output = output.view(batch_size, seq_length, self.output_features, self.length)
-        return output
-
-
-class GenerativeNetwork(nn.Module):
-    def __init__(self, dropout, channels=2, **kwargs):
-        super(GenerativeNetwork, self).__init__(**kwargs)
-        self.dropout = dropout
-        self.channels = channels
-        self.label2vec = Label2Vec(64)
-        self.rnn = GenerativeGRU(128, 300, 2, dropout)
-        self.linear = LinearNetwork(24, 25, 128, 129 * channels, dropout)
-
-    def forward(self, X, noise):
-        X = self.label2vec(X)
-        X = torch.cat((X, noise), dim=2)
-        X = self.rnn(X)
-        X = self.linear(X)
+        batch_size, seq_length, F, T = X.shape[0], X.shape[1], X.shape[2], X.shape[3]
+        X = X.view(-1, F, T)
+        X = self.network(X)
+        X = X.view(batch_size, seq_length, self.output_channels, T)
         return X
 
 
-class AntiLinear(nn.Module):
-    def __init__(self, input_features, hiddens, output_features, dropout, **kwargs):
-        super(AntiLinear, self).__init__(**kwargs)
-        self.input_features = input_features
-        self.output_features = output_features
-        self.dropout = dropout
-        self.block = nn.Sequential(
-            nn.Conv1d(input_features, hiddens, kernel_size=5, stride=1, padding=0),
+class Encoder(nn.Module):
+    def __init__(self, dropout=0.25, **kwargs):
+        super(Encoder, self).__init__(**kwargs)
+        self.filter_banks = FilterBanks(258, 128, 64, 25)
+        self.dropout1 = nn.Dropout(dropout)
+        self.short_term_gru = ShortTermGRU(64, 128, 2, dropout)
+        self.attention = Attention(256)
+        self.long_term_gru = LongTermGRU(256, 128, 2, dropout)
+        self.label2vec = Label2Vec(256)
+        self.mu = nn.Sequential(
+            nn.Linear(512, 256),
             nn.ReLU(), nn.Dropout(dropout),
-            nn.Conv1d(hiddens, hiddens, kernel_size=3, stride=1, padding=0),
+            nn.Linear(256, 256),
             nn.ReLU(), nn.Dropout(dropout),
-            nn.Conv1d(hiddens, output_features, kernel_size=3, stride=1, padding=0),
-            nn.MaxPool1d(kernel_size=4, stride=4)
+            nn.Linear(256, 128)
         )
-
-    def forward(self, X):
-        batch_size, length, F, T = X.shape[0], X.shape[1], X.shape[2], X.shape[3]
-        if not X.is_contiguous():
-            X = X.contiguous
-        X = X.view(-1, F, T)
-        output = self.block(X)
-        output = output.view(batch_size, length, self.output_features, -1)
-        return output
-
-
-class DiscrimitiveGRU(nn.Module):
-    def __init__(self, input_size, hiddens, layers, dropout, **kwargs):
-        super(DiscrimitiveGRU, self).__init__(**kwargs)
-        self.input_size = input_size
-        self.hiddens = hiddens
-        self.layers = layers
-        self.dropout = dropout
-        self.network = nn.GRU(input_size, hiddens, num_layers=layers, batch_first=True,
-                              dropout=dropout, bidirectional=True)
-
-    def get_initial_states(self, batch_size, device):
-        return torch.zeros((2 * self.layers, batch_size, self.hiddens), device=device)
-
-    def forward(self, X):
-        batch_size, seq_length, features = X.shape[0], X.shape[1], X.shape[2]
-        H0 = self.get_initial_states(batch_size, X.device)
-        (output, Hn) = self.network(X, H0)
-        if not output.is_contiguous():
-            output = output.contiguous()
-        return output
-
-
-class DiscrimitiveNetwork(nn.Module):
-    def __init__(self, dropout, channels, **kwargs):
-        super(DiscrimitiveNetwork, self).__init__(**kwargs)
-        self.antilinear = AntiLinear(129 * channels, 64, 16, dropout)
-        self.label2vec = Label2Vec(64)
-        self.rnn = DiscrimitiveGRU(128, 256, 2, dropout)
-        self.classifier = nn.Sequential(
-            nn.Linear(512, 640),
+        self.sigma = nn.Sequential(
+            nn.Linear(512, 256),
             nn.ReLU(), nn.Dropout(dropout),
-            nn.Linear(640, 320),
+            nn.Linear(256, 256),
             nn.ReLU(), nn.Dropout(dropout),
-            nn.Linear(320, 1)
+            nn.Linear(256, 128)
         )
 
     def forward(self, X, y):
-        Y = self.label2vec(y)
-        X = self.antilinear(X).view(X.shape[0], X.shape[1], -1)
-        X = torch.cat((X, Y), dim=2)
+        batch_size, seq_length = X.shape[0], X.shape[1]
+        X = self.filter_banks(X)
+        X = self.dropout1(X)
+        X = self.short_term_gru(X)
+        X = self.attention(X)
+        X = self.long_term_gru(X)
+        y = self.label2vec(y)
+        y = y.view(-1, y.shape[2])
+        Z = torch.cat((X, y), dim=1)
+        output1, output2 = self.mu(Z), self.sigma(Z)
+        return output1.view(batch_size, seq_length, -1), output2.view(batch_size, seq_length, -1)
+
+
+class Decoder(nn.Module):
+    def __init__(self, dropout=0.25, channels=2, **kwargs):
+        super(Decoder, self).__init__(**kwargs)
+        self.rnn = GRUblock(256, 300, 2, dropout)
+        self.label2vec = Label2Vec(128)
+        self.upsample = Upsample(24, (64, 128, 256), 129 * channels)
+
+    def forward(self, X, y):
+        batch_size, seq_length = X.shape[0], X.shape[1]
+        y = self.label2vec(y)
+        X = torch.cat((X, y), dim=2)
         X = self.rnn(X)
-        X = X.view(-1, X.shape[2])
-        X = self.classifier(X)
+        X = X.view(batch_size, seq_length, X.shape[2] // 25, 25)
+        X = self.upsample(X)
         return X
 
 
+class CVAE(nn.Module):
+    def __init__(self, dropout=0.25, channels=2, **kwargs):
+        super(CVAE, self).__init__(**kwargs)
+        self.encoder = Encoder(dropout)
+        self.decoder = Decoder(dropout, channels)
+
+    def forward(self, X, y, z):
+        mu, sigma = self.encoder(X, y)
+        Z = mu + z * sigma.exp()
+        X_fake = self.decoder(Z, y)
+        return X_fake, mu, sigma
+
+
 if __name__ == '__main__':
-    net = GenerativeNetwork(0.1, 2)
-    X = torch.randint(0, 5, (16, 10), dtype=torch.int64, device='cpu')
-    noise = torch.randn(16, 10, 64)
-    print(net(X, noise).shape)
-    torch.save(net.state_dict(), 'generative_network.pth')
-    torch.save(DiscrimitiveNetwork(0.1, 2).state_dict(), 'discrimitive_network.pth')
+    X = torch.randn((16, 10, 258, 25), dtype=torch.float32, requires_grad=False, device='cpu')
+    y = torch.randint(0, 5, (16, 10), dtype=torch.int64, requires_grad=False, device='cpu')
+    z = torch.randn((16, 10, 128), dtype=torch.float32, requires_grad=False, device='cpu')
+    net = CVAE()
+    X_fake, mu, sigma = net(X, y, z)
+    print(X_fake.shape, mu.shape, sigma.shape)
+    torch.save(net.state_dict(), 'cvae_network.pth')
+    
