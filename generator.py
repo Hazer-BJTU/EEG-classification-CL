@@ -54,9 +54,7 @@ class Upsample(nn.Module):
             nn.ReLU(), nn.BatchNorm1d(hiddens[0]),
             nn.Conv1d(hiddens[0], hiddens[1], kernel_size=3, stride=1, padding=1),
             nn.ReLU(), nn.BatchNorm1d(hiddens[1]),
-            nn.Conv1d(hiddens[1], hiddens[2], kernel_size=3, stride=1, padding=1),
-            nn.ReLU(), nn.BatchNorm1d(hiddens[2]),
-            nn.Conv1d(hiddens[2], output_channels, kernel_size=3, stride=1, padding=1)
+            nn.Conv1d(hiddens[1], output_channels, kernel_size=3, stride=1, padding=1),
         )
 
     def forward(self, X):
@@ -110,7 +108,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__(**kwargs)
         self.rnn = GRUblock(256, 300, 2, dropout)
         self.label2vec = Label2Vec(128)
-        self.upsample = Upsample(24, (64, 128, 256), 129 * channels)
+        self.upsample = Upsample(24, (64, 128), 129 * channels)
 
     def forward(self, X, y):
         batch_size, seq_length = X.shape[0], X.shape[1]
@@ -143,4 +141,4 @@ if __name__ == '__main__':
     X_fake, mu, sigma = net(X, y, z)
     print(X_fake.shape, mu.shape, sigma.shape)
     torch.save(net.state_dict(), 'cvae_network.pth')
-    
+    torch.save(Decoder().state_dict(), 'cvae_decoder.pth')
