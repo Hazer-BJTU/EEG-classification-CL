@@ -137,13 +137,13 @@ class DiscrimitiveNetwork(nn.Module):
         super(DiscrimitiveNetwork, self).__init__(**kwargs)
         self.antilinear = AntiLinear(129 * channels, 64, 16, dropout)
         self.label2vec = Label2Vec(64)
-        self.rnn = DiscrimitiveGRU(128, 172, 2, dropout)
+        self.rnn = DiscrimitiveGRU(128, 256, 2, dropout)
         self.classifier = nn.Sequential(
-            nn.Linear(344, 172),
+            nn.Linear(512, 640),
             nn.ReLU(), nn.Dropout(dropout),
-            nn.Linear(172, 128),
+            nn.Linear(640, 320),
             nn.ReLU(), nn.Dropout(dropout),
-            nn.Linear(128, 1)
+            nn.Linear(320, 1)
         )
 
     def forward(self, X, y):
