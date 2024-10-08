@@ -19,6 +19,7 @@ class CGRnetwork(NaiveCLnetwork):
         self.running_mean, self.running_mean_sqr = 0, 0
         self.running_memory = []
         self.generator_memories = []
+        self.bound = args.cvae_kl_bound
 
     def start_task(self):
         super(CGRnetwork, self).start_task()
@@ -26,6 +27,7 @@ class CGRnetwork(NaiveCLnetwork):
         self.optimizerG = torch.optim.Adam(self.cvae.parameters(), lr=self.args.generator_lr)
         self.schedulerG = torch.optim.lr_scheduler.StepLR(self.optimizerG, max(self.args.num_epochs // 6, 1), 0.6)
         self.running_mean, self.running_mean_sqr = 0, 0
+        self.bound = self.args.cvae_kl_bound
 
     def start_epoch(self):
         super(CGRnetwork, self).start_epoch()
@@ -74,10 +76,10 @@ class CGRnetwork(NaiveCLnetwork):
             y_replay = sample[1].to(self.device)
             z = torch.randn((y_replay.shape[0], y_replay.shape[1], 128),
                             dtype=torch.float32, requires_grad=False, device=self.device)
-            X_replay = gmodel(z, y_replay)
+            X_replay, y_target = gmodel(z, y_replay)
             X_replay = X_replay * self.running_memory[idx][1] + self.running_memory[idx][0]
             y_hat_replay = self.net(X_replay)
-            L_replay = torch.sum(self.loss(y_hat_replay, y_replay.view(-1)))
+            L_replay = torch.sum(self.loss(y_hat_replay, y_target.softmax(dim=1)))
             L = L + L_replay / replay_number
             idx += 1
         L.backward()
@@ -93,13 +95,16 @@ class CGRnetwork(NaiveCLnetwork):
         z = torch.randn((X.shape[0], X.shape[1], 128), dtype=torch.float32, requires_grad=False, device=self.device)
         self.optimizerG.zero_grad()
         self.optimizer.zero_grad()
-        X_fake, mu, sigma = self.cvae(X, y, z)
+        X_fake, y_fake, mu, sigma = self.cvae(X, y, z)
+        y_r, y_g = self.net(X), self.net(X_fake * var + mean)
         L_R = self.args.cvae_coefs[0] * torch.nn.functional.mse_loss(X_fake, (X - mean) / var)
         L_KL = self.args.cvae_coefs[1] * torch.sum(0.5 * (mu.pow(2) + sigma.exp() - sigma - 1)) / X.shape[0]
-        L_N = self.args.cvae_coefs[2] * torch.sum(self.loss(self.net(X_fake * var + mean), self.net(X).softmax(dim=1))) / X.shape[0]
+        L_N = self.args.cvae_coefs[2] * torch.sum(self.loss(y_fake, y_r.softmax(dim=1))) / X.shape[0]
+        L_N = L_N + self.args.cvae_coefs[2] * torch.sum(self.loss(y_fake, y_g.softmax(dim=1))) / X.shape[0]
+        L_N = L_N + self.args.cvae_coefs[2] * torch.sum(self.loss(y_g, y_r.softmax(dim=1))) / X.shape[0]
         self.cvae_loss[0], self.cvae_loss[1] = self.cvae_loss[0] + L_R.item(), self.cvae_loss[1] + L_KL.item()
         self.cvae_loss[2] += L_N.item()
-        if L_KL.item() < self.args.cvae_kl_bound:
+        if L_KL.item() < self.bound:
             (L_R + L_N).backward()
         else:
             (L_R + L_N + L_KL).backward()
@@ -127,6 +132,8 @@ class CGRnetwork(NaiveCLnetwork):
         self.epoch += 1
         self.scheduler.step()
         self.schedulerG.step()
+        if self.cvae_loss[0] < self.cvae_loss[1]:
+            self.bound *= 0.9
 
     def end_task(self):
         super(CGRnetwork, self).end_task()

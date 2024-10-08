@@ -109,15 +109,23 @@ class Decoder(nn.Module):
         self.rnn = GRUblock(256, 300, 2, dropout)
         self.label2vec = Label2Vec(128)
         self.upsample = Upsample(24, (64, 128), 129 * channels)
+        self.classifier = nn.Sequential(
+            nn.Linear(600, 768),
+            nn.ReLU(), nn.Dropout(dropout),
+            nn.Linear(768, 768),
+            nn.ReLU(), nn.Dropout(dropout),
+            nn.Linear(768, 5)
+        )
 
     def forward(self, X, y):
         batch_size, seq_length = X.shape[0], X.shape[1]
         y = self.label2vec(y)
         X = torch.cat((X, y), dim=2)
         X = self.rnn(X)
+        y = self.classifier(X.view(batch_size * seq_length, -1))
         X = X.view(batch_size, seq_length, X.shape[2] // 25, 25)
         X = self.upsample(X)
-        return X
+        return X, y
 
 
 class CVAE(nn.Module):
@@ -129,8 +137,8 @@ class CVAE(nn.Module):
     def forward(self, X, y, z):
         mu, sigma = self.encoder(X, y)
         Z = mu + z * sigma.exp()
-        X_fake = self.decoder(Z, y)
-        return X_fake, mu, sigma
+        X_fake, y_fake = self.decoder(Z, y)
+        return X_fake, y_fake, mu, sigma
 
 
 if __name__ == '__main__':
@@ -138,7 +146,7 @@ if __name__ == '__main__':
     y = torch.randint(0, 5, (16, 10), dtype=torch.int64, requires_grad=False, device='cpu')
     z = torch.randn((16, 10, 128), dtype=torch.float32, requires_grad=False, device='cpu')
     net = CVAE()
-    X_fake, mu, sigma = net(X, y, z)
-    print(X_fake.shape, mu.shape, sigma.shape)
+    X_fake, y_fake, mu, sigma = net(X, y, z)
+    print(X_fake.shape, y_fake.shape, mu.shape, sigma.shape)
     torch.save(net.state_dict(), 'cvae_network.pth')
     torch.save(Decoder().state_dict(), 'cvae_decoder.pth')

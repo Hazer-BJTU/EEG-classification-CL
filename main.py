@@ -34,8 +34,8 @@ parser.add_argument('--replay_mode', type=str, nargs='?', default='none', help='
 parser.add_argument('--buffer_size', type=int, nargs='?', default=16, help='number of examples stored per task')
 parser.add_argument('--channels_num', type=int, nargs='?', default=2, help='number of channels')
 parser.add_argument('--generator_lr', type=float, nargs='?', default=1e-4, help='learning rate for generator')
-parser.add_argument('--cvae_coefs', nargs='+', default=[10, 1, 1], help='coefficients for CVAE')
-parser.add_argument('--cvae_kl_bound', type=float, nargs='?', default=2.5, help='KL boundary for CVAE')
+parser.add_argument('--cvae_coefs', nargs='+', default=[10, 1, 0.33], help='coefficients for CVAE')
+parser.add_argument('--cvae_kl_bound', type=float, nargs='?', default=20, help='KL boundary for CVAE')
 args = parser.parse_args()
 
 if __name__ == '__main__':
