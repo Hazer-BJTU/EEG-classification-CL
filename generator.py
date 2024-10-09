@@ -91,7 +91,7 @@ class Decoder(nn.Module):
         self.label2vec = Label2Vec(64)
         self.rnn = GRUlayer(320, 256, 2)
         self.linear = nn.Sequential(nn.Linear(512, 800), nn.ReLU())
-        self.cnn = CNNlayer([32, 64, 128, 128, channels_num * 129], [5, 5, 5, 5])
+        self.cnn = CNNlayer([32, 64, 128, 256, channels_num * 129], [5, 5, 5, 5])
 
     def forward(self, X, y):
         y = self.label2vec(y)
@@ -120,7 +120,6 @@ if __name__ == '__main__':
     X = torch.randn((16, 10, 258, 25), dtype=torch.float32, device='cpu', requires_grad=False)
     y = torch.randint(0, 5, (16, 10), dtype=torch.int64, device='cpu', requires_grad=False)
     z = torch.randn((16, 10, 256), dtype=torch.float32, device='cpu', requires_grad=False)
-    '''
     encoder = Encoder(2)
     decoder = Decoder(2)
     mu, sigma = encoder(X, y)
@@ -129,7 +128,6 @@ if __name__ == '__main__':
     print(X_fake.shape)
     torch.save(encoder.state_dict(), 'cvae_encoder.pth')
     torch.save(decoder.state_dict(), 'cvae_decoder.pth')
-    '''
     cvae = CVAE(2)
     X_fake, mu, sigma = cvae(X, y, z)
     print(X_fake.shape, mu.shape, sigma.shape)
