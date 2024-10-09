@@ -10,7 +10,7 @@ class CGRnetwork(NaiveCLnetwork):
     def __init__(self, args):
         super(CGRnetwork, self).__init__(args)
         self.generator_memories = []
-        self.cvae = CVAE(0, args.channels_num)
+        self.cvae = CVAE(args.channels_num)
         self.cvae.apply(init_weight)
         self.cvae.to(self.device)
         self.optimizerG = torch.optim.Adam(self.cvae.parameters(), lr=args.generator_lr)
@@ -19,7 +19,6 @@ class CGRnetwork(NaiveCLnetwork):
         self.running_mean, self.running_mean_sqr = 0, 0
         self.running_memory = []
         self.generator_memories = []
-        self.bound = args.cvae_kl_bound
 
     def start_task(self):
         super(CGRnetwork, self).start_task()
@@ -27,7 +26,6 @@ class CGRnetwork(NaiveCLnetwork):
         self.optimizerG = torch.optim.Adam(self.cvae.parameters(), lr=self.args.generator_lr)
         self.schedulerG = torch.optim.lr_scheduler.StepLR(self.optimizerG, max(self.args.num_epochs // 6, 1), 0.6)
         self.running_mean, self.running_mean_sqr = 0, 0
-        self.bound = self.args.cvae_kl_bound
 
     def start_epoch(self):
         super(CGRnetwork, self).start_epoch()
@@ -45,16 +43,20 @@ class CGRnetwork(NaiveCLnetwork):
         self.running_mean_sqr = alpha * self.running_mean_sqr + beta * mean_sqr.item()
         for idx in range(X.shape[0]):
             self.observed_samples += 1
-            if self.label_buffer is None:
+            if self.data_buffer is None:
+                self.data_buffer = torch.unsqueeze(X[idx].clone(), dim=0)
                 self.label_buffer = torch.unsqueeze(y[idx].clone(), dim=0)
                 self.buffer_counter += 1
                 continue
             if self.buffer_counter < self.buffer_size:
+                data = torch.unsqueeze(X[idx].clone(), dim=0)
                 label = torch.unsqueeze(y[idx].clone(), dim=0)
+                self.data_buffer = torch.cat((self.data_buffer, data), dim=0)
                 self.label_buffer = torch.cat((self.label_buffer, label), dim=0)
                 self.buffer_counter += 1
             elif random.random() <= self.buffer_size / self.observed_samples:
                 target = random.randint(0, self.buffer_size - 1)
+                self.data_buffer[target].copy_(X[idx])
                 self.label_buffer[target].copy_(y[idx])
 
     def observe(self, X, y, first_time=False):
@@ -66,7 +68,7 @@ class CGRnetwork(NaiveCLnetwork):
         y_hat = self.net(X)
         L_current = torch.sum(self.loss(y_hat, y.view(-1)))
         L = L_current / X.shape[0]
-        '''start generative replay'''
+        '''start generative replay
         replay_number = 0
         for sample in self.memory_buffer:
             replay_number += sample[1].shape[0]
@@ -81,41 +83,37 @@ class CGRnetwork(NaiveCLnetwork):
             y_hat_replay = self.net(X_replay)
             L_replay = torch.sum(self.loss(y_hat_replay, y_target.softmax(dim=1)))
             L = L + L_replay / replay_number
-            idx += 1
+            idx += 1'''
         L.backward()
         nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=20, norm_type=2)
         self.optimizer.step()
         self.train_loss += L.item()
         self.confusion_matrix.count_task_separated(y_hat, y, 0)
         '''start training generator'''
-        mean = self.running_mean
-        var = (self.running_mean_sqr - self.running_mean ** 2) * (self.observed_samples / (self.observed_samples - 1))
-        var = math.sqrt(var) + 1e-5
-        self.cvae.train()
-        z = torch.randn((X.shape[0], X.shape[1], 128), dtype=torch.float32, requires_grad=False, device=self.device)
-        self.optimizerG.zero_grad()
-        self.optimizer.zero_grad()
-        X_fake, y_fake, mu, sigma = self.cvae(X, y, z)
-        y_r, y_g = self.net(X), self.net(X_fake * var + mean)
-        L_R = self.args.cvae_coefs[0] * torch.nn.functional.mse_loss(X_fake, (X - mean) / var)
-        L_KL = self.args.cvae_coefs[1] * torch.sum(0.5 * (mu.pow(2) + sigma.exp() - sigma - 1)) / X.shape[0]
-        L_N = self.args.cvae_coefs[2] * torch.sum(self.loss(y_fake, y_r.softmax(dim=1))) / X.shape[0]
-        L_N = L_N + self.args.cvae_coefs[2] * torch.sum(self.loss(y_fake, y_g.softmax(dim=1))) / X.shape[0]
-        L_N = L_N + self.args.cvae_coefs[2] * torch.sum(self.loss(y_g, y_r.softmax(dim=1))) / X.shape[0]
-        self.cvae_loss[0], self.cvae_loss[1] = self.cvae_loss[0] + L_R.item(), self.cvae_loss[1] + L_KL.item()
-        self.cvae_loss[2] += L_N.item()
-        if L_KL.item() < self.bound:
-            (L_R + L_N).backward()
-        else:
-            (L_R + L_N + L_KL).backward()
-        nn.utils.clip_grad_norm_(self.cvae.parameters(), max_norm=20, norm_type=2)
-        self.optimizerG.step()
+        if not first_time:
+            mean = self.running_mean
+            var = (self.running_mean_sqr - self.running_mean ** 2) * (self.observed_samples / (self.observed_samples - 1))
+            var = math.sqrt(var) + 1e-5
+            self.cvae.train()
+            datas, labels = self.data_buffer.to(self.device), self.label_buffer.to(self.device)
+            z = torch.randn((datas.shape[0], datas.shape[1], 256),
+                            dtype=torch.float32, requires_grad=False, device=self.device)
+            self.optimizerG.zero_grad()
+            self.optimizer.zero_grad()
+            X_fake, mu, sigma = self.cvae(datas, labels, z)
+            L_R = self.args.cvae_coefs[0] * torch.nn.functional.mse_loss(X_fake, (datas - mean) / var)
+            L_KL = self.args.cvae_coefs[1] * torch.mean(0.5 * (mu.pow(2) + sigma.exp() - sigma - 1))
+            self.cvae_loss[0] += L_R.item()
+            self.cvae_loss[1] += L_KL.item()
+            (L_R + L_KL).backward()
+            nn.utils.clip_grad_norm_(self.cvae.parameters(), max_norm=20, norm_type=2)
+            self.optimizerG.step()
 
     def end_epoch(self, valid_dataset):
         train_acc, train_mf1 = self.confusion_matrix.accuracy(), self.confusion_matrix.macro_f1()
         print(f'epoch: {self.epoch}, train loss: {self.train_loss:.3f}, train accuracy: {train_acc:.3f}, '
               f"macro F1: {train_mf1:.3f}, 1000 lr: {self.optimizer.state_dict()['param_groups'][0]['lr'] * 1000:.3f}, "
-              f'generator loss: {self.cvae_loss[0]:.3f} + {self.cvae_loss[2]:.3f} + {self.cvae_loss[1]:.3f}')
+              f'generator loss: {self.cvae_loss[0]:.3f} + {self.cvae_loss[1]:.3f}')
         if (self.epoch + 1) % self.args.valid_epoch == 0:
             print(f'validating on the datasets...')
             valid_confusion = ConfusionMatrix(1)
@@ -132,11 +130,11 @@ class CGRnetwork(NaiveCLnetwork):
         self.epoch += 1
         self.scheduler.step()
         self.schedulerG.step()
-        if self.cvae_loss[0] < self.cvae_loss[1]:
-            self.bound *= 0.9
 
     def end_task(self):
-        super(CGRnetwork, self).end_task()
+        self.task += 1
+        self.best_net_memory.append(self.best_net)
+        self.memory_buffer.append((None, self.label_buffer))
         mean = self.running_mean
         var = (self.running_mean_sqr - self.running_mean ** 2) * (self.observed_samples / (self.observed_samples - 1))
         var = math.sqrt(var)
