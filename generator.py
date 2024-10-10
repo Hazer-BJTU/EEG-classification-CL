@@ -115,7 +115,7 @@ class CVAE(nn.Module):
         Z = mu + sigma.exp() * z
         Z = torch.cat((Z, invariant), dim=2)
         X_fake = self.decoder(Z, y)
-        return X_fake, mu, sigma
+        return X_fake, mu, sigma, invariant
 
 
 if __name__ == '__main__':
@@ -132,6 +132,6 @@ if __name__ == '__main__':
     torch.save(encoder.state_dict(), 'cvae_encoder.pth')
     torch.save(decoder.state_dict(), 'cvae_decoder.pth')
     cvae = CVAE(2)
-    X_fake, mu, sigma = cvae(X, y, z)
+    X_fake, mu, sigma, invariant = cvae(X, y, z)
     print(X_fake.shape, mu.shape, sigma.shape)
     torch.save(cvae.state_dict(), 'cvae_network.pth')
