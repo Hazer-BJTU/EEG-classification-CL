@@ -33,9 +33,6 @@ parser.add_argument('--lr', type=float, nargs='?', default=1e-3, help='learning 
 parser.add_argument('--replay_mode', type=str, nargs='?', default='none', help='continual learning strategy')
 parser.add_argument('--buffer_size', type=int, nargs='?', default=16, help='number of examples stored per task')
 parser.add_argument('--channels_num', type=int, nargs='?', default=2, help='number of channels')
-parser.add_argument('--generator_lr', type=float, nargs='?', default=1e-4, help='learning rate for generator')
-parser.add_argument('--cvae_coefs', nargs='+', default=[1, 1, 1], help='coefficients for CVAE')
-parser.add_argument('--visualize', type=bool, nargs='?', help='require visualization when CGR')
 args = parser.parse_args()
 
 if __name__ == '__main__':
