@@ -104,17 +104,15 @@ def init_weight(module):
 class SeqSleepNet(nn.Module):
     def __init__(self, dropout=0.25, **kwargs):
         super(SeqSleepNet, self).__init__(**kwargs)
-        self.filter_banks = FilterBanks(258, 128, 96, 25)
+        self.filter_banks = FilterBanks(258, 128, 64, 25)
         self.dropout1 = nn.Dropout(dropout)
-        self.short_term_gru = ShortTermGRU(96, 256, 2, dropout)
-        self.attention = Attention(512)
-        self.long_term_gru = LongTermGRU(512, 256, 2, dropout)
+        self.short_term_gru = ShortTermGRU(64, 128, 2, dropout)
+        self.attention = Attention(256)
+        self.long_term_gru = LongTermGRU(256, 256, 2, dropout)
         self.classifier = nn.Sequential(
-            nn.Linear(512, 768),
+            nn.Linear(512, 640),
             nn.ReLU(), nn.Dropout(dropout),
-            nn.Linear(768, 768),
-            nn.ReLU(), nn.Dropout(dropout),
-            nn.Linear(768, 5)
+            nn.Linear(640, 5)
         )
 
     def forward(self, X):
