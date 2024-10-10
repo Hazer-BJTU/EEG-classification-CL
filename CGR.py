@@ -129,27 +129,27 @@ class CGRnetwork(NaiveCLnetwork):
                 self.best_valid_acc = valid_acc
                 self.best_net = './modelsaved/' + str(self.args.replay_mode) + '_task' + str(self.task) + '.pth'
                 torch.save(self.net.state_dict(), self.best_net)
-                if self.args.visualize:
-                    mean = self.running_mean
-                    var = (self.running_mean_sqr - self.running_mean ** 2) * (
-                            self.observed_samples / (self.observed_samples - 1))
-                    var = math.sqrt(var)
-                    datas, labels = self.data_buffer.to(self.device), self.label_buffer.to(self.device)
-                    z = torch.randn((datas.shape[0], datas.shape[1], 256),
+            if self.args.visualize:
+                mean = self.running_mean
+                var = (self.running_mean_sqr - self.running_mean ** 2) * (
+                        self.observed_samples / (self.observed_samples - 1))
+                var = math.sqrt(var)
+                datas, labels = self.data_buffer.to(self.device), self.label_buffer.to(self.device)
+                z = torch.randn((datas.shape[0], datas.shape[1], 256),
+                                dtype=torch.float32, requires_grad=False, device=self.device)
+                noise = torch.randn((datas.shape[0], datas.shape[1], 256),
                                     dtype=torch.float32, requires_grad=False, device=self.device)
-                    noise = torch.randn((datas.shape[0], datas.shape[1], 256),
-                                        dtype=torch.float32, requires_grad=False, device=self.device)
-                    X_fake, _, _ = self.cvae(datas, labels, z)
-                    X_fake = torch.abs(X_fake * var + mean - X)
-                    X_noise, _, _ = self.cvae(noise, labels, z)
-                    X_noise = torch.abs(X_noise * var + mean - X)
-                    for idx in range(datas.shape[1]):
-                        image = X_fake[0][idx].clone()
-                        image = unloader(image)
-                        image.save(f'./visual/real_fake_diff_{idx}.jpg')
-                        image = X_noise[0][idx].clone()
-                        image = unloader(image)
-                        image.save(f'./visual/real_noise_diff_{idx}.jpg')
+                X_fake, _, _ = self.cvae(datas, labels, z)
+                X_fake = torch.abs(X_fake * var + mean - datas).tanh()
+                X_noise = self.cvae.decoder(noise, labels)
+                X_noise = torch.abs(X_noise * var + mean - datas).tanh()
+                for idx in range(datas.shape[1]):
+                    image = X_fake[0][idx].clone()
+                    image = unloader(image)
+                    image.save(f'./visual/real_fake_diff_{idx}.jpg')
+                    image = X_noise[0][idx].clone()
+                    image = unloader(image)
+                    image.save(f'./visual/real_noise_diff_{idx}.jpg')
         self.epoch += 1
         self.scheduler.step()
         self.schedulerG.step()
