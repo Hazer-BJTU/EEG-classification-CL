@@ -72,8 +72,9 @@ class Encoder(nn.Module):
         self.cnn = CNNlayer([channels_num * 129, 128, 128, 64, 32], [5, 5, 5, 5])
         self.linear = nn.Sequential(nn.Linear(864, 512), nn.ReLU())
         self.rnn = GRUlayer(512, 256, 2)
-        self.mu = nn.Sequential(nn.Linear(512, 256), nn.ReLU(), nn.Linear(256, 256))
-        self.sigma = nn.Sequential(nn.Linear(512, 256), nn.ReLU(), nn.Linear(256, 256))
+        self.mu = nn.Sequential(nn.Linear(512, 256), nn.ReLU(), nn.Linear(256, 128))
+        self.sigma = nn.Sequential(nn.Linear(512, 256), nn.ReLU(), nn.Linear(256, 128))
+        self.invariant = nn.Sequential(nn.Linear(512, 256), nn.ReLU(), nn.Linear(256, 256))
 
     def forward(self, X, y):
         y = self.label2vec(y)
@@ -81,15 +82,15 @@ class Encoder(nn.Module):
         X = torch.cat((X, y), dim=2)
         X = self.linear(X)
         X = self.rnn(X)
-        output1, output2 = self.mu(X), self.sigma(X)
-        return output1, output2
+        output1, output2, output3 = self.mu(X), self.sigma(X), self.invariant(X)
+        return output1, output2, output3
 
 
 class Decoder(nn.Module):
     def __init__(self, channels_num, **kwargs):
         super(Decoder, self).__init__(**kwargs)
         self.label2vec = Label2Vec(64)
-        self.rnn = GRUlayer(320, 256, 2)
+        self.rnn = GRUlayer(448, 256, 2)
         self.linear = nn.Sequential(nn.Linear(512, 800), nn.ReLU())
         self.cnn = CNNlayer([32, 64, 128, 256, channels_num * 129], [5, 5, 5, 5])
 
@@ -110,8 +111,9 @@ class CVAE(nn.Module):
         self.decoder = Decoder(channels_num)
 
     def forward(self, X, y, z):
-        mu, sigma = self.encoder(X, y)
+        mu, sigma, invariant = self.encoder(X, y)
         Z = mu + sigma.exp() * z
+        Z = torch.cat((Z, invariant), dim=2)
         X_fake = self.decoder(Z, y)
         return X_fake, mu, sigma
 
@@ -119,11 +121,12 @@ class CVAE(nn.Module):
 if __name__ == '__main__':
     X = torch.randn((16, 10, 258, 25), dtype=torch.float32, device='cpu', requires_grad=False)
     y = torch.randint(0, 5, (16, 10), dtype=torch.int64, device='cpu', requires_grad=False)
-    z = torch.randn((16, 10, 256), dtype=torch.float32, device='cpu', requires_grad=False)
+    z = torch.randn((16, 10, 128), dtype=torch.float32, device='cpu', requires_grad=False)
     encoder = Encoder(2)
     decoder = Decoder(2)
-    mu, sigma = encoder(X, y)
+    mu, sigma, invariant = encoder(X, y)
     Z = mu + z * sigma.exp()
+    Z = torch.cat((Z, invariant), dim=2)
     X_fake = decoder(Z, y)
     print(X_fake.shape)
     torch.save(encoder.state_dict(), 'cvae_encoder.pth')

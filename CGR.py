@@ -78,7 +78,7 @@ class CGRnetwork(NaiveCLnetwork):
         idx = 0
         for sample, gmodel in zip(self.memory_buffer, self.generator_memories):
             y_replay = sample[1].to(self.device)
-            z = torch.randn((y_replay.shape[0], y_replay.shape[1], 256),
+            z = torch.randn((y_replay.shape[0], y_replay.shape[1], 384),
                             dtype=torch.float32, requires_grad=False, device=self.device)
             X_replay = gmodel(z, y_replay)
             X_replay = X_replay * self.running_memory[idx][1] + self.running_memory[idx][0]
@@ -96,7 +96,7 @@ class CGRnetwork(NaiveCLnetwork):
         var = (self.running_mean_sqr - self.running_mean ** 2) * (self.observed_samples / (self.observed_samples - 1))
         var = math.sqrt(var) + 1e-5
         self.cvae.train()
-        z = torch.randn((X.shape[0], X.shape[1], 256), dtype=torch.float32, requires_grad=False, device=self.device)
+        z = torch.randn((X.shape[0], X.shape[1], 128), dtype=torch.float32, requires_grad=False, device=self.device)
         self.optimizerG.zero_grad()
         self.optimizer.zero_grad()
         X_fake, mu, sigma = self.cvae(X, y, z)
@@ -135,9 +135,9 @@ class CGRnetwork(NaiveCLnetwork):
                         self.observed_samples / (self.observed_samples - 1))
                 var = math.sqrt(var)
                 datas, labels = self.data_buffer.to(self.device), self.label_buffer.to(self.device)
-                z = torch.randn((datas.shape[0], datas.shape[1], 256),
+                z = torch.randn((datas.shape[0], datas.shape[1], 128),
                                 dtype=torch.float32, requires_grad=False, device=self.device)
-                noise = torch.randn((datas.shape[0], datas.shape[1], 256),
+                noise = torch.randn((datas.shape[0], datas.shape[1], 384),
                                     dtype=torch.float32, requires_grad=False, device=self.device)
                 X_fake, _, _ = self.cvae(datas, labels, z)
                 X_fake = torch.abs(X_fake * var + mean - datas).tanh()
