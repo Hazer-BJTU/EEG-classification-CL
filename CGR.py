@@ -24,6 +24,8 @@ class CGRnetwork(NaiveCLnetwork):
         self.compressed = None
         self.best_cave_loss = 100
         self.best_decoder = None
+        self.heatmap = torch.zeros((10, self.args.channels_num * 129, 25),
+                                   dtype=torch.float32, device=self.device, requires_grad=False)
 
     def start_task(self):
         super(CGRnetwork, self).start_task()
@@ -34,6 +36,8 @@ class CGRnetwork(NaiveCLnetwork):
         self.compressed = None
         self.best_cave_loss = 100
         self.best_decoder = None
+        self.heatmap = torch.zeros((10, self.args.channels_num * 129, 25),
+                                   dtype=torch.float32, device=self.device, requires_grad=False)
 
     def start_epoch(self):
         super(CGRnetwork, self).start_epoch()
@@ -153,10 +157,14 @@ class CGRnetwork(NaiveCLnetwork):
                 self.compressed = (mu.detach(), sigma.detach(), invariant.detach())
             if self.args.visualize:
                 X_fake = torch.abs(X_fake * var + mean - datas).tanh()
+                self.heatmap += X_fake[0]
                 for idx in range(datas.shape[1]):
                     image = X_fake[0][idx].clone()
                     image = unloader(image)
                     image.save(f'./visual/real_fake_diff_{idx}.jpg')
+                    image = self.heatmap[idx].clone()
+                    image = unloader(image)
+                    image.save(f'./visual/heatmap_{idx}.jpg')
         self.epoch += 1
         self.scheduler.step()
         self.schedulerG.step()
