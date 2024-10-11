@@ -48,10 +48,10 @@ class ShortTermGRU(nn.Module):
         super(ShortTermGRU, self).__init__(**kwargs)
         self.input_size = input_size
         self.hiddens = hiddens
-        self.block = nn.GRU(input_size, hiddens, batch_first=True, bidirectional=True)
+        self.block = nn.GRU(input_size, hiddens, batch_first=True, bidirectional=False)
 
     def get_initial_states(self, batch_size, device):
-        return torch.zeros((2, batch_size, self.hiddens), device=device)
+        return torch.zeros((1, batch_size, self.hiddens), device=device)
 
     def forward(self, X):
         batch_size, seq_length, F, T = X.shape[0], X.shape[1], X.shape[2], X.shape[3]
@@ -60,7 +60,7 @@ class ShortTermGRU(nn.Module):
         (output, Hn) = self.block(X, H0)
         if not output.is_contiguous():
             output = output.contiguous()
-        output = output.view(batch_size, seq_length, T, self.hiddens * 2)
+        output = output.view(batch_size, seq_length, T, self.hiddens)
         return output
 
 
@@ -69,10 +69,10 @@ class LongTermGRU(nn.Module):
         super(LongTermGRU, self).__init__(**kwargs)
         self.input_size = input_size
         self.hiddens = hiddens
-        self.block = nn.GRU(input_size, hiddens, batch_first=True, bidirectional=True)
+        self.block = nn.GRU(input_size, hiddens, batch_first=True, bidirectional=False)
 
     def get_initial_states(self, batch_size, device):
-        return torch.zeros((2, batch_size, self.hiddens), device=device)
+        return torch.zeros((1, batch_size, self.hiddens), device=device)
 
     def forward(self, X):
         batch_size, seq_length, features = X.shape[0], X.shape[1], X.shape[2]
@@ -103,15 +103,15 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__(**kwargs)
         self.label2vec = Label2Vec(64)
         self.cnn = CNNlayer((channels_num * 129, 128, 64, 32), (3, 3, 3))
-        self.long_term_gru = LongTermGRU(864, 128)
-        self.short_term_gru = ShortTermGRU(channels_num * 129, 128)
+        self.long_term_gru = LongTermGRU(864, 256)
+        self.short_term_gru = ShortTermGRU(channels_num * 129, 256)
         self.mu = nn.Sequential(
-            nn.Linear(768, 512),
+            nn.Linear(512, 512),
             nn.ReLU(),
             nn.Linear(512, 256)
         )
         self.sigma = nn.Sequential(
-            nn.Linear(768, 512),
+            nn.Linear(512, 512),
             nn.ReLU(),
             nn.Linear(512, 256)
         )
@@ -139,10 +139,10 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__(**kwargs)
         self.label2vec = Label2Vec(64)
         self.cnn = CNNlayer((256, 128, 64, 32), (3, 3, 3))
-        self.long_term_gru = LongTermGRU(864, 128)
-        self.short_term_gru = ShortTermGRU(256, 128)
+        self.long_term_gru = LongTermGRU(864, 256)
+        self.short_term_gru = ShortTermGRU(256, 256)
         self.linear = nn.Sequential(
-            nn.Linear(768, 512),
+            nn.Linear(512, 512),
             nn.ReLU(),
             nn.Linear(512, channels_num * 129)
         )

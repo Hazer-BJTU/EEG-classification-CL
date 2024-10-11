@@ -80,7 +80,7 @@ class CGRnetwork(NaiveCLnetwork):
         y_hat = self.net(X)
         L_current = torch.sum(self.loss(y_hat, y.view(-1)))
         L = L_current / X.shape[0]
-        '''start generative replay'''
+        '''start generative replay
         replay_number = 0
         for sample in self.memory_buffer:
             replay_number += sample[1].shape[0]
@@ -98,7 +98,7 @@ class CGRnetwork(NaiveCLnetwork):
             y_hat_replay = self.net(X_replay)
             L_replay = torch.mean(self.loss(y_hat_replay, y_replay.view(-1)))
             L = L + L_replay
-            idx += 1
+            idx += 1'''
         L.backward()
         nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=20, norm_type=2)
         self.optimizer.step()
@@ -109,18 +109,18 @@ class CGRnetwork(NaiveCLnetwork):
         var = (self.running_mean_sqr - self.running_mean ** 2) * (self.observed_samples / (self.observed_samples - 1))
         var = math.sqrt(var) + 1e-5
         self.cvae.train()
-        z = torch.randn((X.shape[0], X.shape[1], 128), dtype=torch.float32, requires_grad=False, device=self.device)
+        z = torch.randn((X.shape[0], 10, 25, 256), dtype=torch.float32, requires_grad=False, device=self.device)
         self.optimizerG.zero_grad()
         self.optimizer.zero_grad()
-        X_fake, mu, sigma, invariant = self.cvae(X, y, z)
-        y_g, y_r = self.net(X_fake * var + mean), self.net(X)
+        X_fake, mu, sigma = self.cvae(X, y, z)
+        y_g = self.net(X_fake * var + mean)
         L_R = self.args.cvae_coefs[0] * torch.nn.functional.mse_loss(X_fake, (X - mean) / var)
         L_KL = self.args.cvae_coefs[1] * torch.mean(0.5 * (mu.pow(2) + sigma.exp() - sigma - 1))
-        L_N = self.args.cvae_coefs[2] * torch.mean(self.loss(y_g, y_r.softmax(dim=1)))
+        L_N = self.args.cvae_coefs[2] * torch.sum(self.loss(y_g, y.view(-1))) / X.shape[0]
         self.cvae_loss[0] += L_R.item()
         self.cvae_loss[1] += L_KL.item()
         self.cvae_loss[2] += L_N.item()
-        (L_R + L_N).backward()
+        L_R.backward()
         nn.utils.clip_grad_norm_(self.cvae.parameters(), max_norm=20, norm_type=2)
         self.optimizerG.step()
 
@@ -148,23 +148,22 @@ class CGRnetwork(NaiveCLnetwork):
                     self.observed_samples / (self.observed_samples - 1))
             var = math.sqrt(var)
             datas, labels = self.data_buffer.to(self.device), self.label_buffer.to(self.device)
-            z = torch.randn((datas.shape[0], datas.shape[1], 128),
-                            dtype=torch.float32, requires_grad=False, device=self.device)
-            X_fake, mu, sigma, invariant = self.cvae(datas, labels, z)
+            z = torch.randn((datas.shape[0], 10, 25, 256), dtype=torch.float32, requires_grad=False, device=self.device)
+            X_fake, mu, sigma = self.cvae(datas, labels, z)
             if self.cvae_loss[0] + self.cvae_loss[2] < self.best_cave_loss:
                 self.best_cave_loss = self.cvae_loss[0] + self.cvae_loss[2]
                 self.best_decoder = copy.deepcopy(self.cvae.decoder)
-                self.compressed = (mu.detach(), sigma.detach(), invariant.detach())
             if self.args.visualize:
-                X_fake = torch.abs(X_fake * var + mean - datas).tanh()
-                self.heatmap += X_fake[0]
-                for idx in range(datas.shape[1]):
-                    image = X_fake[0][idx].clone()
-                    image = unloader(image)
-                    image.save(f'./visual/real_fake_diff_{idx}.jpg')
-                    image = self.heatmap[idx].clone()
-                    image = unloader(image)
-                    image.save(f'./visual/heatmap_{idx}.jpg')
+                with torch.no_grad():
+                    X_fake = torch.abs(X_fake * var + mean - datas).tanh()
+                    self.heatmap += X_fake[0].detach()
+                    for idx in range(datas.shape[1]):
+                        image = X_fake[0][idx].detach()
+                        image = unloader(image)
+                        image.save(f'./visual/real_fake_diff_{idx}.jpg')
+                        image = self.heatmap[idx].detach()
+                        image = unloader(image)
+                        image.save(f'./visual/heatmap_{idx}.jpg')
         self.epoch += 1
         self.scheduler.step()
         self.schedulerG.step()
@@ -172,7 +171,7 @@ class CGRnetwork(NaiveCLnetwork):
     def end_task(self):
         self.task += 1
         self.best_net_memory.append(self.best_net)
-        self.memory_buffer.append((self.compressed, self.label_buffer))
+        self.memory_buffer.append((None, self.label_buffer))
         mean = self.running_mean
         var = (self.running_mean_sqr - self.running_mean ** 2) * (self.observed_samples / (self.observed_samples - 1))
         var = math.sqrt(var)
