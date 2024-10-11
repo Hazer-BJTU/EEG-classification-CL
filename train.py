@@ -19,6 +19,8 @@ def train_cl(args, trains, valids, tests):
     elif args.replay_mode == 'packnet':
         args.dropout, args.weight_decay = 0, 0
         clnetwork = PackNetCLnetwork(args)
+    elif args.replay_mode == 'cgr':
+        clnetwork = CGRnetwork(args)
     confusion = ConfusionMatrix(args.task_num)
     print('start first testing...')
     confusion = evaluate_tasks(clnetwork.net, tests, confusion, clnetwork.device, args.valid_batch)
