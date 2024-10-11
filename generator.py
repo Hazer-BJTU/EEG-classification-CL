@@ -83,6 +83,21 @@ class LongTermGRU(nn.Module):
         return output
 
 
+class Resblock(nn.Module):
+    def __init__(self, input_features, output_features, **kwargs):
+        super(Resblock, self).__init__(**kwargs)
+        self.input_features = input_features
+        self.output_features = output_features
+        self.block = nn.Sequential(nn.Linear(input_features, output_features), nn.ReLU())
+
+    def forward(self, X):
+        batch_size, seq_length, F, T = X.shape[0], X.shape[1], X.shape[2], X.shape[3]
+        X = X.transpose(2, 3).contiguous().view(batch_size * seq_length * T, F)
+        X = self.block(X)
+        X = X.view(batch_size, seq_length, T, self.output_features)
+        return X
+
+
 class Encoder(nn.Module):
     def __init__(self, channels_num=2, **kwargs):
         super(Encoder, self).__init__(**kwargs)
@@ -91,14 +106,14 @@ class Encoder(nn.Module):
         self.long_term_gru = LongTermGRU(864, 128)
         self.short_term_gru = ShortTermGRU(channels_num * 129, 128)
         self.mu = nn.Sequential(
-            nn.Linear(512, 256),
+            nn.Linear(768, 512),
             nn.ReLU(),
-            nn.Linear(256, 256)
+            nn.Linear(512, 256)
         )
         self.sigma = nn.Sequential(
-            nn.Linear(512, 256),
+            nn.Linear(768, 512),
             nn.ReLU(),
-            nn.Linear(256, 256)
+            nn.Linear(512, 256)
         )
 
     def forward(self, X, y):
@@ -127,9 +142,9 @@ class Decoder(nn.Module):
         self.long_term_gru = LongTermGRU(864, 128)
         self.short_term_gru = ShortTermGRU(256, 128)
         self.linear = nn.Sequential(
-            nn.Linear(512, 256),
+            nn.Linear(768, 512),
             nn.ReLU(),
-            nn.Linear(256, channels_num * 129)
+            nn.Linear(512, channels_num * 129)
         )
 
     def forward(self, X, y):
