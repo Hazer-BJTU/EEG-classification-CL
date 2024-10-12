@@ -30,7 +30,7 @@ class CNNlayer(nn.Module):
         self.block = nn.Sequential()
         for idx in range(0, len(channels_lst) - 1):
             self.block.add_module(f'module_#{idx}_conv',
-                                  nn.Conv1d(channels_lst[idx], channels_lst[idx+1],
+                                  nn.Conv1d(channels_lst[idx], channels_lst[idx + 1],
                                             kernel_size=kernels_lst[idx], stride=1, padding='same'))
             if idx != len(channels_lst) - 2:
                 self.block.add_module(f'module_#{idx}_relu', nn.ReLU())
@@ -98,53 +98,17 @@ class Resblock(nn.Module):
         return X
 
 
-class Encoder(nn.Module):
+class Gnerator(nn.Module):
     def __init__(self, channels_num=2, **kwargs):
-        super(Encoder, self).__init__(**kwargs)
-        self.label2vec = Label2Vec(64)
-        self.cnn = CNNlayer((channels_num * 129, 128, 64, 32), (3, 3, 3))
-        self.long_term_gru = LongTermGRU(864, 256)
+        super(Gnerator, self).__init__(**kwargs)
+        self.channels_num = channels_num
+        self.label2vec = Label2Vec(400)
+        self.cnn = CNNlayer((channels_num * 129, 128, 64, 32, 16), (3, 3, 3, 3))
+        self.long_term_gru = LongTermGRU(800, 256)
         self.short_term_gru = ShortTermGRU(channels_num * 129, 256)
-        self.mu = nn.Sequential(
-            nn.Linear(512, 512),
-            nn.ReLU(),
-            nn.Linear(512, 256)
-        )
-        self.sigma = nn.Sequential(
-            nn.Linear(512, 512),
-            nn.ReLU(),
-            nn.Linear(512, 256)
-        )
-
-    def forward(self, X, y):
-        batch_size, seq_length, F, T = X.shape[0], X.shape[1], X.shape[2], X.shape[3]
-        y = self.label2vec(y)
-        ld = self.cnn(X)
-        ld = ld.view(batch_size, seq_length, -1)
-        ld = torch.cat((ld, y), dim=2)
-        ld = self.long_term_gru(ld)
-        ld = torch.unsqueeze(ld, dim=2)
-        ld = ld.expand(batch_size, seq_length, T, ld.shape[3])
-        sd = self.short_term_gru(X)
-        Z = torch.cat((sd, ld), dim=3)
-        Z = Z.view(batch_size * seq_length * T, -1)
-        output1, output2 = self.mu(Z), self.sigma(Z)
-        output1 = output1.view(batch_size, seq_length, T, -1)
-        output2 = output2.view(batch_size, seq_length, T, -1)
-        return output1, output2
-
-
-class Decoder(nn.Module):
-    def __init__(self, channels_num, **kwargs):
-        super(Decoder, self).__init__(**kwargs)
-        self.label2vec = Label2Vec(64)
-        self.cnn = CNNlayer((256, 128, 64, 32), (3, 3, 3))
-        self.long_term_gru = LongTermGRU(864, 256)
-        self.short_term_gru = ShortTermGRU(256, 256)
         self.linear = nn.Sequential(
-            nn.Linear(512, 512),
-            nn.ReLU(),
-            nn.Linear(512, channels_num * 129)
+            nn.Linear(512, 768), nn.ReLU(),
+            nn.Linear(768, channels_num * 129)
         )
 
     def forward(self, X, y):
@@ -157,33 +121,46 @@ class Decoder(nn.Module):
         ld = torch.unsqueeze(ld, dim=2)
         ld = ld.expand(batch_size, seq_length, T, ld.shape[3])
         sd = self.short_term_gru(X)
-        Z = torch.cat((sd, ld), dim=3)
+        Z = torch.cat((ld, sd), dim=3)
         Z = Z.view(batch_size * seq_length * T, -1)
         output = self.linear(Z)
         output = output.view(batch_size, seq_length, T, -1).transpose(2, 3)
         return output
 
 
-class CVAE(nn.Module):
+class Discriminator(nn.Module):
     def __init__(self, channels_num=2, **kwargs):
-        super(CVAE, self).__init__(**kwargs)
-        self.encoder = Encoder(channels_num)
-        self.decoder = Decoder(channels_num)
+        super(Discriminator, self).__init__(**kwargs)
+        self.channels_num = channels_num
+        self.label2vec = Label2Vec(400)
+        self.cnn = CNNlayer((channels_num * 129, 128, 64, 32, 16), (3, 3, 3, 3))
+        self.long_term_gru = LongTermGRU(800, 256)
+        self.linear = nn.Sequential(
+            nn.Linear(256, 256), nn.ReLU(),
+            nn.Linear(256, 128), nn.ReLU(),
+            nn.Linear(128, 1)
+        )
 
-    def forward(self, X, y, z):
-        mu, sigma = self.encoder(X, y)
-        Z = mu + z * sigma.exp()
-        Z = Z.transpose(2, 3)
-        Z = self.decoder(Z, y)
-        return Z, mu, sigma
+    def forward(self, X, y):
+        batch_size, seq_length, F, T = X.shape[0], X.shape[1], X.shape[2], X.shape[3]
+        y = self.label2vec(y)
+        ld = self.cnn(X)
+        ld = ld.view(batch_size, seq_length, -1)
+        ld = torch.cat((ld, y), dim=2)
+        ld = self.long_term_gru(ld)
+        ld = ld.view(batch_size * seq_length, -1)
+        output = self.linear(ld)
+        output = output.view(batch_size, seq_length)
+        return output
 
 
 if __name__ == '__main__':
-    X = torch.randn((16, 10, 258, 25), dtype=torch.float32, device='cpu', requires_grad=False)
     y = torch.randint(0, 5, (16, 10), dtype=torch.int64, device='cpu', requires_grad=False)
-    z = torch.randn((16, 10, 25, 256), dtype=torch.float32, device='cpu', requires_grad=False)
-    net = CVAE()
-    Z, mu, sigma = net(X, y, z)
-    print(Z.shape, mu.shape, sigma.shape)
-    torch.save(net.encoder.state_dict(), 'cvae_encoder.pth')
-    torch.save(net.decoder.state_dict(), 'cvae_decoder.pth')
+    z = torch.randn((16, 10, 258, 25), dtype=torch.float32, device='cpu', requires_grad=False)
+    netG, netD = Gnerator(), Discriminator()
+    X = netG(z, y)
+    print(X.shape)
+    pred = netD(X, y)
+    print(pred.shape)
+    torch.save(netG.state_dict(), 'gnerator.pth')
+    torch.save(netD.state_dict(), 'discriminator.pth')
