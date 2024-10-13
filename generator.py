@@ -108,7 +108,7 @@ class Gnerator(nn.Module):
         self.short_term_gru = ShortTermGRU(channels_num * 129, 256)
         self.linear = nn.Sequential(
             nn.Linear(512, 768), nn.ReLU(),
-            nn.Linear(768, channels_num * 129)
+            nn.Linear(768, channels_num * 129), nn.Tanh()
         )
 
     def forward(self, X, y):
