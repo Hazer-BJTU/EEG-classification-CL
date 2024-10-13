@@ -34,6 +34,7 @@ class CNNlayer(nn.Module):
                                             kernel_size=kernels_lst[idx], stride=1, padding='same'))
             if idx != len(channels_lst) - 2:
                 self.block.add_module(f'module_#{idx}_relu', nn.ReLU())
+                self.block.add_module(f'module_#{idx}_bn', nn.BatchNorm1d(channels_lst[idx + 1]))
 
     def forward(self, X):
         batch_size, seq_length, F, T = X.shape[0], X.shape[1], X.shape[2], X.shape[3]
@@ -103,28 +104,24 @@ class Gnerator(nn.Module):
         super(Gnerator, self).__init__(**kwargs)
         self.channels_num = channels_num
         self.label2vec = Label2Vec(400)
-        self.cnn = CNNlayer((channels_num * 129, 128, 64, 32, 16), (3, 3, 3, 3))
+        self.cnn1 = CNNlayer((channels_num * 129, 128, 64, 32, 16), (3, 3, 3, 3))
         self.long_term_gru = LongTermGRU(800, 256)
         self.short_term_gru = ShortTermGRU(channels_num * 129, 256)
-        self.linear = nn.Sequential(
-            nn.Linear(512, 768), nn.ReLU(),
-            nn.Linear(768, channels_num * 129), nn.Tanh()
-        )
+        self.cnn2 = CNNlayer((256, 256, 256, channels_num * 129), (5, 5, 5))
 
     def forward(self, X, y):
         batch_size, seq_length, F, T = X.shape[0], X.shape[1], X.shape[2], X.shape[3]
         y = self.label2vec(y)
-        ld = self.cnn(X)
+        ld = self.cnn1(X)
         ld = ld.view(batch_size, seq_length, -1)
         ld = torch.cat((ld, y), dim=2)
         ld = self.long_term_gru(ld)
         ld = torch.unsqueeze(ld, dim=2)
         ld = ld.expand(batch_size, seq_length, T, ld.shape[3])
         sd = self.short_term_gru(X)
-        Z = torch.cat((ld, sd), dim=3)
-        Z = Z.view(batch_size * seq_length * T, -1)
-        output = self.linear(Z)
-        output = output.view(batch_size, seq_length, T, -1).transpose(2, 3)
+        Z = ld + sd
+        Z = Z.view(batch_size, seq_length, T, -1).transpose(2, 3)
+        output = self.cnn2(Z)
         return output
 
 
@@ -136,9 +133,9 @@ class Discriminator(nn.Module):
         self.cnn = CNNlayer((channels_num * 129, 128, 64, 32, 16), (3, 3, 3, 3))
         self.long_term_gru = LongTermGRU(800, 256)
         self.linear = nn.Sequential(
-            nn.Linear(256, 256), nn.ReLU(),
             nn.Linear(256, 128), nn.ReLU(),
-            nn.Linear(128, 1)
+            nn.Linear(128, 64), nn.ReLU(),
+            nn.Linear(64, 1)
         )
 
     def forward(self, X, y):

@@ -34,7 +34,7 @@ class CGRnetwork(NaiveCLnetwork):
         self.generator.apply(init_weight)
         self.discriminator.apply(init_weight)
         self.optimizerG = torch.optim.SGD(self.generator.parameters(), lr=self.args.generator_lr)
-        self.optimizerD = torch.optim.SGD(self.discriminator.parameters(), lr=self.args.generator_lr / 10)
+        self.optimizerD = torch.optim.SGD(self.discriminator.parameters(), lr=self.args.generator_lr)
         self.schedulerG = torch.optim.lr_scheduler.StepLR(self.optimizerG, max(self.args.num_epochs // 6, 1), 0.6)
         self.schedulerD = torch.optim.lr_scheduler.StepLR(self.optimizerD, max(self.args.num_epochs // 6, 1), 0.6)
 
@@ -148,8 +148,9 @@ class CGRnetwork(NaiveCLnetwork):
                 for idx in range(datas.shape[1]):
                     image1 = datas[0][idx].detach()
                     image2 = datas_fake[0][idx].detach()
-                    dvdline = torch.ones((image1.shape[0], 1), dtype=image1.dtype, device=image1.device) * 50
-                    image = torch.cat((image1, dvdline, image2), dim=1)
+                    maxn = torch.max(image1.abs()).item()
+                    dvdline = torch.ones((image1.shape[0], 1), dtype=image1.dtype, device=image1.device) * 10
+                    image = torch.cat((image1 / maxn, dvdline, image2 / maxn), dim=1)
                     image = unloader(image)
                     image.save(f'./visual/real_fake_example_{idx}.jpg')
         self.epoch += 1
