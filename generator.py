@@ -45,11 +45,11 @@ class CNNlayer(nn.Module):
 
 
 class ShortTermGRU(nn.Module):
-    def __init__(self, input_size, hiddens, **kwargs):
+    def __init__(self, input_size, hiddens, bidirectional=False, **kwargs):
         super(ShortTermGRU, self).__init__(**kwargs)
         self.input_size = input_size
         self.hiddens = hiddens
-        self.block = nn.GRU(input_size, hiddens, batch_first=True, bidirectional=False)
+        self.block = nn.GRU(input_size, hiddens, batch_first=True, bidirectional=bidirectional)
 
     def get_initial_states(self, batch_size, device):
         return torch.zeros((1, batch_size, self.hiddens), device=device)
@@ -66,14 +66,15 @@ class ShortTermGRU(nn.Module):
 
 
 class LongTermGRU(nn.Module):
-    def __init__(self, input_size, hiddens, **kwargs):
+    def __init__(self, input_size, hiddens, bidirectional=False, **kwargs):
         super(LongTermGRU, self).__init__(**kwargs)
         self.input_size = input_size
         self.hiddens = hiddens
-        self.block = nn.GRU(input_size, hiddens, batch_first=True, bidirectional=False)
+        self.block = nn.GRU(input_size, hiddens, batch_first=True, bidirectional=bidirectional)
+        self.d = 2 if bidirectional else 1
 
     def get_initial_states(self, batch_size, device):
-        return torch.zeros((1, batch_size, self.hiddens), device=device)
+        return torch.zeros((self.d, batch_size, self.hiddens), device=device)
 
     def forward(self, X):
         batch_size, seq_length, features = X.shape[0], X.shape[1], X.shape[2]
@@ -84,44 +85,28 @@ class LongTermGRU(nn.Module):
         return output
 
 
-class Resblock(nn.Module):
-    def __init__(self, input_features, output_features, **kwargs):
-        super(Resblock, self).__init__(**kwargs)
-        self.input_features = input_features
-        self.output_features = output_features
-        self.block = nn.Sequential(nn.Linear(input_features, output_features), nn.ReLU())
-
-    def forward(self, X):
-        batch_size, seq_length, F, T = X.shape[0], X.shape[1], X.shape[2], X.shape[3]
-        X = X.transpose(2, 3).contiguous().view(batch_size * seq_length * T, F)
-        X = self.block(X)
-        X = X.view(batch_size, seq_length, T, self.output_features)
-        return X
-
-
 class Gnerator(nn.Module):
     def __init__(self, channels_num=2, **kwargs):
         super(Gnerator, self).__init__(**kwargs)
         self.channels_num = channels_num
-        self.label2vec = Label2Vec(400)
-        self.cnn1 = CNNlayer((channels_num * 129, 128, 64, 32, 16), (3, 3, 3, 3))
-        self.long_term_gru = LongTermGRU(800, 256)
-        self.short_term_gru = ShortTermGRU(channels_num * 129, 256)
-        self.cnn2 = CNNlayer((256, 256, 256, channels_num * 129), (5, 5, 5))
+        self.label2vec = Label2Vec(256)
+        self.long_term_gru = LongTermGRU(320, 256, bidirectional=True)
+        self.linear = nn.Sequential(
+            nn.Linear(512, 320), nn.ReLU(),
+            nn.Linear(320, channels_num * 129), nn.ReLU()
+        )
+        self.cnn = CNNlayer((1, 64, 128, 128, 64, 25), (17, 17, 17, 17, 17))
+        self.tanh = nn.Tanh()
 
-    def forward(self, X, y):
-        batch_size, seq_length, F, T = X.shape[0], X.shape[1], X.shape[2], X.shape[3]
+    def forward(self, Z, y):
+        batch_size, seq_length = Z.shape[0], Z.shape[1]
         y = self.label2vec(y)
-        ld = self.cnn1(X)
-        ld = ld.view(batch_size, seq_length, -1)
-        ld = torch.cat((ld, y), dim=2)
-        ld = self.long_term_gru(ld)
-        ld = torch.unsqueeze(ld, dim=2)
-        ld = ld.expand(batch_size, seq_length, T, ld.shape[3])
-        sd = self.short_term_gru(X)
-        Z = ld + sd
-        Z = Z.view(batch_size, seq_length, T, -1).transpose(2, 3)
-        output = self.cnn2(Z)
+        Z = torch.cat((Z, y), dim=2)
+        Z = self.long_term_gru(Z)
+        Z = self.linear(Z.view(batch_size * seq_length, -1))
+        Z = torch.unsqueeze(Z.view(batch_size, seq_length, -1), dim=2)
+        Z = self.cnn(Z)
+        output = self.tanh(Z).transpose(2, 3)
         return output
 
 
@@ -129,13 +114,13 @@ class Discriminator(nn.Module):
     def __init__(self, channels_num=2, **kwargs):
         super(Discriminator, self).__init__(**kwargs)
         self.channels_num = channels_num
-        self.label2vec = Label2Vec(400)
+        self.label2vec = Label2Vec(256)
         self.cnn = CNNlayer((channels_num * 129, 128, 64, 32, 16), (3, 3, 3, 3))
-        self.long_term_gru = LongTermGRU(800, 256)
+        self.long_term_gru = LongTermGRU(656, 256, bidirectional=True)
         self.linear = nn.Sequential(
+            nn.Linear(512, 256), nn.ReLU(),
             nn.Linear(256, 128), nn.ReLU(),
-            nn.Linear(128, 64), nn.ReLU(),
-            nn.Linear(64, 1)
+            nn.Linear(128, 1)
         )
 
     def forward(self, X, y):
@@ -153,7 +138,7 @@ class Discriminator(nn.Module):
 
 if __name__ == '__main__':
     y = torch.randint(0, 5, (16, 10), dtype=torch.int64, device='cpu', requires_grad=False)
-    z = torch.randn((16, 10, 258, 25), dtype=torch.float32, device='cpu', requires_grad=False)
+    z = torch.randn((16, 10, 64), dtype=torch.float32, device='cpu', requires_grad=False)
     netG, netD = Gnerator(), Discriminator()
     X = netG(z, y)
     print(X.shape)

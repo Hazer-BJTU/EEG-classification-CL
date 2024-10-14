@@ -90,7 +90,7 @@ class CGRnetwork(NaiveCLnetwork):
         var = var.pow(0.5)
         self.optimizerG.zero_grad()
         self.optimizerD.zero_grad()
-        z = torch.randn(X.shape, dtype=torch.float32, requires_grad=False, device=self.device)
+        z = torch.randn((X.shape[0], X.shape[1], 64), dtype=torch.float32, requires_grad=False, device=self.device)
         target = torch.ones((X.shape[0], X.shape[1]), dtype=torch.float32, requires_grad=False, device=self.device)
         X_fake = self.generator(z, y)
         pred_d = self.discriminator(X_fake * var + mean, y)
@@ -107,7 +107,8 @@ class CGRnetwork(NaiveCLnetwork):
         target = torch.randint(0, 2, (y.shape[0], y.shape[1]), dtype=torch.float32, device=self.device)
         choice = target.view(y.shape[0], y.shape[1], 1, 1).expand(X.shape)
         maskt, maskg = choice, 1 - choice
-        discriminator_input = maskt * X + maskg * (X_fake.detach() * var + mean)
+        noise = torch.randn(X.shape, dtype=torch.float32, requires_grad=False, device=self.device) * var * 0.33
+        discriminator_input = maskt * X + maskg * (X_fake.detach() * var + mean) + noise
         pred = self.discriminator(discriminator_input, y)
         L_D = self.bceloss(pred.view(-1), target.view(-1))
         self.generative_loss[1] += L_D.item()
@@ -142,15 +143,17 @@ class CGRnetwork(NaiveCLnetwork):
                 var = (self.running_mean_sqr - self.running_mean.pow(2)) * (self.observed_samples / (self.observed_samples - 1))
                 var = var.pow(0.5)
                 datas, labels = self.data_buffer.to(self.device), self.label_buffer.to(self.device)
-                z = torch.randn(datas.shape, dtype=torch.float32, requires_grad=False, device=self.device)
+                z = torch.randn((datas.shape[0], datas.shape[1], 64),
+                                dtype=torch.float32, requires_grad=False, device=self.device)
                 datas_fake = self.generator(z, labels)
                 datas_fake = datas_fake * var + mean
                 for idx in range(datas.shape[1]):
                     image1 = datas[0][idx].detach()
                     image2 = datas_fake[0][idx].detach()
-                    maxn = torch.max(image1.abs()).item()
-                    dvdline = torch.ones((image1.shape[0], 1), dtype=image1.dtype, device=image1.device) * 10
-                    image = torch.cat((image1 / maxn, dvdline, image2 / maxn), dim=1)
+                    minn = torch.min(image1).item()
+                    maxn = torch.max(image1 - minn).item()
+                    dvdline = torch.ones((image1.shape[0], 1), dtype=image1.dtype, device=image1.device) * 2
+                    image = torch.cat(((image1 - minn) / maxn, dvdline, (image2 - minn) / maxn), dim=1)
                     image = unloader(image)
                     image.save(f'./visual/real_fake_example_{idx}.jpg')
         self.epoch += 1
