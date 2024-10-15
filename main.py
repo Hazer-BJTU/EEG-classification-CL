@@ -33,11 +33,11 @@ parser.add_argument('--lr', type=float, nargs='?', default=1e-3, help='learning 
 parser.add_argument('--replay_mode', type=str, nargs='?', default='none', help='continual learning strategy')
 parser.add_argument('--buffer_size', type=int, nargs='?', default=16, help='number of examples stored per task')
 parser.add_argument('--channels_num', type=int, nargs='?', default=2, help='number of channels')
-parser.add_argument('--generator_lr', type=float, nargs='?', default=1e-6, help='learning rate for GAN')
+parser.add_argument('--generator_lr', type=float, nargs='?', default=1e-5, help='learning rate for GAN')
 parser.add_argument('--visualize', type=bool, nargs='?', default=True, help='enable generative visualization')
 parser.add_argument('--wgan_c', type=float, nargs='?', default=0.01, help='lower and upper bound of wgan parameters')
-parser.add_argument('--n_critic', type=int, nargs='?', default=3, help='number of critic steps per epoch')
-parser.add_argument('--cgr_coef', type=float, nargs='?', default=0.33, help='coefficient for cgr L_N')
+parser.add_argument('--n_critic', type=int, nargs='?', default=4, help='number of critic steps per epoch')
+parser.add_argument('--cgr_coef', type=float, nargs='?', default=10, help='coefficient for cgr L_N')
 args = parser.parse_args()
 
 if __name__ == '__main__':

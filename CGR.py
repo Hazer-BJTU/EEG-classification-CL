@@ -20,7 +20,7 @@ class CGRnetwork(NaiveCLnetwork):
         self.discriminator = Discriminator(args.channels_num)
         self.optimizerG, self.optimizerD = None, None
         self.schedulerG, self.schedulerD = None, None
-        self.bceloss = nn.BCEWithLogitsLoss()
+        self.mseloss = torch.nn.MSELoss()
         self.generative_loss = [0, 0, 0]
         self.generator.to(self.device)
         self.discriminator.to(self.device)
@@ -80,19 +80,6 @@ class CGRnetwork(NaiveCLnetwork):
         y_hat = self.net(X)
         L_current = torch.sum(self.loss(y_hat, y.view(-1)))
         L = L_current / X.shape[0]
-        '''generative replay'''
-        idx = 0
-        for sample, model in zip(self.memory_buffer, self.generator_memory):
-            model = model.to(self.device).eval()
-            y_replay = sample[1].to(self.device)
-            z = torch.randn((y_replay.shape[0], y_replay.shape[1], 128),
-                            dtype=torch.float32, requires_grad=False, device=self.device)
-            X_fake = model(z, y_replay)
-            X_fake = X_fake.detach() * self.running_memory[idx][1] + self.running_memory[idx][0]
-            y_replay_hat = self.net(X_fake)
-            L_replay = torch.sum(self.loss(y_replay_hat, y_replay.view(-1)))
-            L = L + L_replay / y_replay.shape[0]
-            idx += 1
         L.backward()
         nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=20, norm_type=2)
         self.optimizer.step()
@@ -109,7 +96,9 @@ class CGRnetwork(NaiveCLnetwork):
         pred_d = self.discriminator(X_fake * var + mean, y)
         L_G = -torch.mean(pred_d)
         self.generative_loss[0] += L_G.item()
-        L_G.backward()
+        pred_n = self.net(X_fake * var + mean)
+        L_N = self.mseloss(pred_n, y_hat.detach()) * self.args.cgr_coef
+        (L_G + L_N).backward()
         nn.utils.clip_grad_norm_(self.generator.parameters(), max_norm=20, norm_type=2)
         self.optimizerG.step()
         '''train discriminator'''
