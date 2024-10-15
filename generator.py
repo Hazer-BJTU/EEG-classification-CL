@@ -18,7 +18,7 @@ class Label2Vec(nn.Module):
     def forward(self, X):
         X_one_hot = torch.nn.functional.one_hot(X, 5)
         X_one_hot = X_one_hot.to(torch.float32)
-        self.W.to(X_one_hot.device)
+        self.W = self.W.to(X_one_hot.device)
         output = X_one_hot @ self.W
         return output
 
