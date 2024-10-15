@@ -149,10 +149,12 @@ class CGRnetwork(NaiveCLnetwork):
                 for idx in range(datas.shape[1]):
                     image1 = datas[0][idx].detach()
                     image2 = datas_fake[0][idx].detach()
+                    image3 = torch.rand(image1.shape, dtype=torch.float32, requires_grad=False, device=self.device)
+                    image3 = image3 * var + mean
                     minn = torch.min(image1).item()
                     maxn = torch.max(image1 - minn).item()
                     dvdline = torch.zeros((image1.shape[0], 1), dtype=image1.dtype, device=image1.device)
-                    image = torch.cat(((image1 - minn) / maxn, dvdline, (image2 - minn) / maxn), dim=1)
+                    image = torch.cat(((image1 - minn) / maxn, dvdline, (image2 - minn) / maxn, dvdline, (image3 - minn) / maxn), dim=1)
                     image = (torch.clamp(image, 0, 1) * 255).cpu().numpy().astype(np.uint8)
                     plt.imsave(f'./visual/real_fake_example_{idx}.jpg', image)
         self.epoch += 1
