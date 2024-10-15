@@ -35,7 +35,7 @@ parser.add_argument('--buffer_size', type=int, nargs='?', default=16, help='numb
 parser.add_argument('--channels_num', type=int, nargs='?', default=2, help='number of channels')
 parser.add_argument('--generator_lr', type=float, nargs='?', default=1e-3, help='learning rate for GAN')
 parser.add_argument('--visualize', type=bool, nargs='?', default=True, help='enable generative visualization')
-parser.add_argument('--cgr_coef', type=float, nargs='?', default=1, help='coefficient for cgr L_N')
+parser.add_argument('--cgr_coef', type=float, nargs='?', default=0.33, help='coefficient for cgr L_N')
 args = parser.parse_args()
 
 if __name__ == '__main__':

@@ -24,6 +24,7 @@ class CGRnetwork(NaiveCLnetwork):
         self.generative_loss = [0, 0, 0]
         self.generator.to(self.device)
         self.discriminator.to(self.device)
+        self.generator_memory = []
 
     def start_task(self):
         super(CGRnetwork, self).start_task()
@@ -79,6 +80,19 @@ class CGRnetwork(NaiveCLnetwork):
         y_hat = self.net(X)
         L_current = torch.sum(self.loss(y_hat, y.view(-1)))
         L = L_current / X.shape[0]
+        '''generative replay'''
+        idx = 0
+        for sample, model in zip(self.memory_buffer, self.generator_memory):
+            model = model.to(self.device).eval()
+            y_replay = sample[1].to(self.device)
+            z = torch.randn((y_replay.shape[0], y_replay.shape[1], 64),
+                            dtype=torch.float32, requires_grad=False, device=self.device)
+            X_fake = model(z, y_replay)
+            X_fake = X_fake.detach() * self.running_memory[idx][1] + self.running_memory[idx][0]
+            y_replay_hat = self.net(X_fake)
+            L_replay = torch.sum(self.loss(y_replay_hat, y_replay.view(-1)))
+            L = L + L_replay / y_replay.shape[0]
+            idx += 1
         L.backward()
         nn.utils.clip_grad_norm_(self.net.parameters(), max_norm=20, norm_type=2)
         self.optimizer.step()
@@ -169,6 +183,7 @@ class CGRnetwork(NaiveCLnetwork):
         var = (self.running_mean_sqr - self.running_mean.pow(2)) * (self.observed_samples / (self.observed_samples - 1))
         var = var.pow(0.5)
         self.running_memory.append((mean, var))
+        self.generator_memory.append(copy.deepcopy(self.generator).to('cpu'))
 
 
 if __name__ == '__main__':
